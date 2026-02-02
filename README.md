@@ -1,0 +1,260 @@
+# Tradecraft
+
+An autonomous trading system powered by Claude. The AI agent analyzes market data, makes trading decisions, and executes trades—all within hard risk limits enforced at the infrastructure level.
+
+```
+╔════════════════════════════════════════════════════════════╗
+║                    PORTFOLIO STATUS                        ║
+╚════════════════════════════════════════════════════════════╝
+
+Summary:
+──────────────────────────────────────────────────
+  Cash:        $55,645.36
+  Equity:      $99,987.07
+  Daily P&L:   -$1.14
+
+Positions:
+──────────────────────────────────────────────────
+  Symbol   Qty      Avg Cost    Current     Value        P&L
+  GOOGL      26     $343.92     $343.40   $8,928.40     -$13.52
+  AMZN       37     $242.87     $242.79   $8,983.23      -$2.96
+  AAPL       30     $268.95     $269.29   $8,078.70      $10.20
+  NVDA       53     $186.13     $186.14   $9,865.58       $0.69
+  MSFT       20     $424.60     $424.29   $8,485.80      -$6.20
+```
+
+## Features
+
+- **Autonomous Trading**: Claude analyzes markets and executes trades independently
+- **Risk Management**: Hard limits on position size, daily loss, drawdown—enforced by system, not prompts
+- **Paper Trading**: Safe simulation with real market data from Yahoo Finance
+- **CLI Interface**: Non-interactive commands for easy automation
+- **Agent Backtesting**: Test the actual Claude agent on historical data
+- **Full Audit Trail**: Every decision logged for review
+
+## Quick Start
+
+```bash
+# Install dependencies
+bun install
+
+# Configure (set API keys, trading universe, risk limits)
+bun run setup
+
+# Check portfolio
+bun run cli status
+
+# Run a trading cycle
+bun run cli cycle
+
+# View trades
+bun run cli history
+```
+
+## Requirements
+
+- [Bun](https://bun.sh) runtime
+- Anthropic API key
+- Internet connection (for Yahoo Finance data)
+
+## Installation
+
+```bash
+git clone https://github.com/yourusername/tradecraft.git
+cd tradecraft
+bun install
+```
+
+## Configuration
+
+Run the setup wizard:
+
+```bash
+bun run setup
+```
+
+Or manually edit `~/.config/tradecraft/config.toml`:
+
+```toml
+dataProvider = "yahoo"
+anthropicApiKey = "sk-ant-..."
+
+[agentParams]
+model = "claude-sonnet-4-5-20250929"
+maxTurns = 10
+cycleIntervalMs = 60000
+
+[tradingUniverse]
+symbols = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA"]
+allowShorts = false
+
+[riskLimits]
+maxPositionSize = 0.1      # 10% max per position
+maxPositionCount = 10
+dailyLossLimit = 0.02      # 2% daily stop
+weeklyLossLimit = 0.05     # 5% weekly stop
+maxDrawdown = 0.1          # 10% circuit breaker
+maxOrderValue = 10000      # $10k max order
+
+[capital]
+initialCapital = 100000
+paperTrading = true
+```
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `bun run cli status` | Portfolio overview with positions |
+| `bun run cli quotes` | Real-time prices for trading universe |
+| `bun run cli cycle` | Run single trading cycle |
+| `bun run cli start` | Run continuous trading cycles |
+| `bun run cli history` | View trade history |
+| `bun run cli risk` | Check risk limits and circuit breaker |
+| `bun run cli order <side> <symbol> <qty>` | Manual order |
+| `bun run cli reset` | Reset portfolio to initial state |
+
+## How It Works
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│     CLI      │────▶│ TradingAgent │────▶│  Claude API  │
+└──────────────┘     └──────────────┘     └──────────────┘
+                            │                    │
+                            ▼                    ▼
+                     ┌──────────────┐     ┌──────────────┐
+                     │    Tools     │◀────│  Tool Calls  │
+                     │  - market    │     │  - analyze   │
+                     │  - portfolio │     │  - trade     │
+                     │  - orders    │     └──────────────┘
+                     └──────────────┘
+                            │
+           ┌────────────────┼────────────────┐
+           ▼                ▼                ▼
+    ┌────────────┐   ┌────────────┐   ┌────────────┐
+    │ Portfolio  │   │    Data    │   │    Risk    │
+    │  Manager   │   │  Manager   │   │  Monitor   │
+    └────────────┘   └────────────┘   └────────────┘
+```
+
+Each trading cycle:
+1. Agent calls `get_risk_status` and `get_market_data` (in parallel)
+2. Agent analyzes portfolio state and market conditions
+3. Agent decides on trades (buy, sell, or hold)
+4. Agent calls `place_order` for each trade
+5. System validates orders against risk limits
+6. Orders execute or are rejected with error
+
+**Key design principle**: Risk limits are enforced at the tool level, not by prompts. Even if the agent tries to place a risky order, the system will reject it.
+
+## Backtesting
+
+### Rule-Based Strategies
+
+Test predefined algorithmic strategies:
+
+```bash
+# Available: sma-crossover, rsi-mean-reversion, momentum
+bun run backtest sma-crossover --start 2024-01-01
+bun run backtest momentum --symbols AAPL,NVDA,TSLA
+```
+
+### Agent Backtest
+
+Test the actual Claude agent on historical data:
+
+```bash
+# Default: 3 months, weekly cycles (~$1.50)
+bun run agent-backtest
+
+# Custom period
+bun run agent-backtest --start 2024-06-01 --end 2024-12-31
+
+# Daily cycles (more realistic, ~$25-50/year)
+bun run agent-backtest --frequency 1
+
+# Skip confirmation
+bun run agent-backtest -y
+```
+
+**Cost estimates:**
+
+| Period | Frequency | Estimated Cost |
+|--------|-----------|----------------|
+| 1 month | Weekly | ~$0.50 |
+| 3 months | Weekly | ~$1.50 |
+| 1 year | Weekly | ~$5 |
+| 1 year | Daily | ~$25-50 |
+
+## Project Structure
+
+```
+tradecraft/
+├── src/
+│   ├── agent/           # Trading agent and tools
+│   │   ├── index.ts     # TradingAgent class
+│   │   ├── mcp-server.ts # Tool definitions
+│   │   └── prompts.ts   # System and cycle prompts
+│   ├── backtest/        # Backtesting engines
+│   │   ├── engine.ts    # Rule-based backtester
+│   │   └── agent-engine.ts # Claude agent backtester
+│   ├── config/          # Configuration schemas
+│   ├── data/            # Market data providers
+│   ├── portfolio/       # Position management
+│   ├── risk/            # Risk monitoring
+│   └── cli.ts           # CLI interface
+├── data/                # Persisted state
+├── AGENT_GUIDE.md       # Guide for AI agents
+└── README.md
+```
+
+## Risk Limits
+
+| Limit | Default | Description |
+|-------|---------|-------------|
+| Max Position Size | 10% | Maximum % of portfolio in one position |
+| Max Position Count | 10 | Maximum number of positions |
+| Daily Loss Limit | 2% | Stop trading if daily loss exceeds |
+| Weekly Loss Limit | 5% | Stop trading if weekly loss exceeds |
+| Max Drawdown | 10% | Circuit breaker triggers at this drawdown |
+| Max Order Value | $10,000 | Maximum value per order |
+
+When limits are breached, the circuit breaker activates and blocks all trading until reset.
+
+## API Costs
+
+Each trading cycle costs approximately **$0.08-0.15** depending on complexity:
+
+- Simple hold decision: ~$0.08 (8-10k tokens)
+- Multiple trades: ~$0.15-0.20 (15-20k tokens)
+
+For continuous trading at 1-minute intervals, expect ~$100-200/day. Weekly cycles are more economical for testing.
+
+## For AI Agents
+
+See [AGENT_GUIDE.md](./AGENT_GUIDE.md) for a comprehensive guide on operating this system, including:
+- All CLI commands with examples
+- Tool descriptions and usage
+- Troubleshooting common issues
+- Architecture details
+
+## Development
+
+```bash
+# Type checking
+bun run typecheck
+
+# Test API connections
+bun run src/test-api.ts
+
+# Run TUI (requires TTY)
+bun run start
+```
+
+## License
+
+MIT
+
+## Disclaimer
+
+This is a paper trading system for educational purposes. Do not use for actual trading without understanding the risks. Past performance (including backtests) does not guarantee future results. The authors are not responsible for any financial losses.

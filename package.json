@@ -1,0 +1,34 @@
+{
+  "name": "tradecraft",
+  "version": "0.1.0",
+  "description": "Autonomous trading TUI with Claude Agent SDK",
+  "module": "src/main.tsx",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/main.tsx",
+    "cli": "bun run src/cli.ts",
+    "setup": "bun run src/setup-cli.tsx",
+    "backtest": "bun run src/backtest-cli.ts",
+    "agent-backtest": "bun run src/agent-backtest-cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.2.10",
+    "@types/uuid": "^11.0.0",
+    "ink-testing-library": "^4.0.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^2.1.29",
+    "@anthropic-ai/sdk": "^0.72.1",
+    "@iarna/toml": "^2.2.5",
+    "asciichart": "^1.5.25",
+    "chalk": "^5.6.2",
+    "ink": "^6.6.0",
+    "react": "^19.2.4",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
+  }
+}
