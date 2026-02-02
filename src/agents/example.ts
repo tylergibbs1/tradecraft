@@ -63,10 +63,7 @@ async function main() {
     tradingUniverse,
     model: 'claude-sonnet-4-20250514', // Use Sonnet for cost efficiency
     priceDataFetcher,
-    newsProviderConfig: {
-      alphaVantageKey: process.env.ALPHA_VANTAGE_API_KEY,
-      finnhubKey: process.env.FINNHUB_API_KEY,
-    },
+    exaApiKey: process.env.EXA_API_KEY,
   });
 
   console.log('🐝 Swarm initialized with agents:');

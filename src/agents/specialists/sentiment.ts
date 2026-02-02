@@ -25,11 +25,11 @@ export class SentimentAnalyst extends ResearchAgent {
   constructor(
     config: Omit<ResearchAgentConfig, 'role'>,
     deps: ResearchAgentDependencies & {
-      newsProviderConfig?: { alphaVantageKey?: string; finnhubKey?: string };
+      exaApiKey?: string;
     }
   ) {
     super({ ...config, role: 'sentiment-analyst' }, deps);
-    this.newsProvider = getNewsProvider(deps.newsProviderConfig);
+    this.newsProvider = getNewsProvider({ exaApiKey: deps.exaApiKey });
   }
 
   protected getTools(): ToolDefinition[] {

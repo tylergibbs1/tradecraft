@@ -43,7 +43,7 @@ export interface PortfolioManagerDependencies {
   apiKey: string;
   signalBus?: SignalBus;
   priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
-  newsProviderConfig?: { alphaVantageKey?: string; finnhubKey?: string };
+  exaApiKey?: string;
 }
 
 export interface TradeDecision {
@@ -104,7 +104,7 @@ export class PortfolioManagerAgent {
       ),
       new SentimentAnalyst(
         { ...baseConfig, agentId: `${config.agentId}-sentiment` },
-        { apiKey: deps.apiKey, signalBus: this.signalBus, newsProviderConfig: deps.newsProviderConfig }
+        { apiKey: deps.apiKey, signalBus: this.signalBus, exaApiKey: deps.exaApiKey }
       ),
       new MacroAnalyst(
         { ...baseConfig, agentId: `${config.agentId}-macro` },
@@ -347,7 +347,7 @@ export function createSwarm(
     tradingUniverse: string[];
     model?: string;
     priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
-    newsProviderConfig?: { alphaVantageKey?: string; finnhubKey?: string };
+    exaApiKey?: string;
   }
 ): PortfolioManagerAgent {
   return new PortfolioManagerAgent(
@@ -363,7 +363,7 @@ export function createSwarm(
     {
       apiKey: config.apiKey,
       priceDataFetcher: config.priceDataFetcher,
-      newsProviderConfig: config.newsProviderConfig,
+      exaApiKey: config.exaApiKey,
     }
   );
 }
