@@ -116,36 +116,134 @@ paperTrading = true
 
 ## How It Works
 
+### Architecture
+
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│     CLI      │────▶│ TradingAgent │────▶│  Claude API  │
-└──────────────┘     └──────────────┘     └──────────────┘
-                            │                    │
-                            ▼                    ▼
-                     ┌──────────────┐     ┌──────────────┐
-                     │    Tools     │◀────│  Tool Calls  │
-                     │  - market    │     │  - analyze   │
-                     │  - portfolio │     │  - trade     │
-                     │  - orders    │     └──────────────┘
-                     └──────────────┘
-                            │
-           ┌────────────────┼────────────────┐
-           ▼                ▼                ▼
-    ┌────────────┐   ┌────────────┐   ┌────────────┐
-    │ Portfolio  │   │    Data    │   │    Risk    │
-    │  Manager   │   │  Manager   │   │  Monitor   │
-    └────────────┘   └────────────┘   └────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                           CLI / TUI                              │
+│                     bun run cli <command>                        │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        TradingAgent                              │
+│  • Builds prompts with portfolio state and market context        │
+│  • Sends requests to Claude API                                  │
+│  • Processes tool calls and executes trades                      │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                ┌───────────────┼───────────────┐
+                ▼               ▼               ▼
+┌───────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ Portfolio Manager │ │  Data Manager   │ │  Risk Monitor   │
+│                   │ │                 │ │                 │
+│ • Positions       │ │ • Yahoo Finance │ │ • Position size │
+│ • Cash balance    │ │ • OHLCV data    │ │ • Loss limits   │
+│ • Order execution │ │ • Quote cache   │ │ • Circuit break │
+│ • P&L tracking    │ │                 │ │                 │
+└───────────────────┘ └─────────────────┘ └─────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+   positions.json       Yahoo API         circuit_breaker.json
 ```
 
-Each trading cycle:
-1. Agent calls `get_risk_status` and `get_market_data` (in parallel)
-2. Agent analyzes portfolio state and market conditions
-3. Agent decides on trades (buy, sell, or hold)
-4. Agent calls `place_order` for each trade
-5. System validates orders against risk limits
-6. Orders execute or are rejected with error
+### Trading Cycle Flow
 
-**Key design principle**: Risk limits are enforced at the tool level, not by prompts. Even if the agent tries to place a risky order, the system will reject it.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. START CYCLE                                                  │
+│     CLI calls TradingAgent.runCycle()                           │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  2. BUILD CONTEXT                                                │
+│     • Load portfolio state (cash, positions, P&L)               │
+│     • Check risk status (circuit breaker, limits)               │
+│     • Build system prompt with trading persona                   │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  3. CLAUDE ANALYZES                                              │
+│     Agent receives prompt and calls tools:                       │
+│     ┌─────────────────┐  ┌─────────────────┐                    │
+│     │ get_risk_status │  │ get_market_data │  (parallel)        │
+│     └─────────────────┘  └─────────────────┘                    │
+│     Then analyzes: prices, trends, portfolio weights, risk      │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  4. TRADING DECISION                                             │
+│     Claude decides: BUY, SELL, or HOLD                          │
+│     • Considers position sizing (max 10% per stock)             │
+│     • Checks available cash                                      │
+│     • Evaluates risk/reward                                      │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                    ┌───────────┴───────────┐
+                    ▼                       ▼
+            ┌─────────────┐         ┌─────────────┐
+            │    HOLD     │         │ TRADE       │
+            │  No action  │         │ place_order │
+            └─────────────┘         └─────────────┘
+                                           │
+                                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  5. RISK VALIDATION (Infrastructure-Level)                       │
+│     System checks BEFORE executing:                              │
+│     □ Position size ≤ 10% of portfolio?                         │
+│     □ Order value ≤ $10,000?                                    │
+│     □ Daily loss < 2%?                                          │
+│     □ Circuit breaker closed?                                   │
+│                                                                  │
+│     ✓ PASS → Execute order                                      │
+│     ✗ FAIL → Reject with error message                          │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  6. EXECUTION & LOGGING                                          │
+│     • Update portfolio state                                     │
+│     • Record trade in journal                                    │
+│     • Log for audit trail                                        │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  7. CYCLE COMPLETE                                               │
+│     Report: turns, tokens, cost, orders placed                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Available Tools
+
+| Tool | Purpose |
+|------|---------|
+| `get_risk_status` | Check if trading is allowed, view limits |
+| `get_market_data` | Fetch current prices for symbols |
+| `get_portfolio` | View positions, cash, equity, P&L |
+| `place_order` | Execute a buy/sell order |
+| `cancel_order` | Cancel a pending order |
+
+### Key Design Principle
+
+**Risk limits are enforced at the infrastructure level, not by prompts.**
+
+Even if Claude decides to make a risky trade, the system will reject it:
+
+```
+Claude: "I'll buy $50,000 of NVDA"
+        ↓
+System: ❌ REJECTED - exceeds maxOrderValue ($10,000)
+        ↓
+Claude: "Order rejected. I'll buy $9,000 instead."
+        ↓
+System: ✓ EXECUTED
+```
+
+This separation ensures safety even if the agent makes mistakes or receives adversarial prompts.
 
 ## Backtesting
 

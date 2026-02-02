@@ -3,6 +3,9 @@ import { PortfolioManager } from "../portfolio/manager.js";
 import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
 import { DataManager, Quote } from "../data/index.js";
 import { OrderSideSchema, OrderTypeSchema } from "../risk/types.js";
+import { getEdgarProvider } from "../data/providers/edgar.js";
+import { getNewsProvider } from "../data/providers/news.js";
+import { getExaProvider, ExaCategory } from "../data/providers/exa.js";
 
 // Tool input schemas
 const PlaceOrderSchema = z.object({
@@ -32,11 +35,61 @@ const GetPortfolioSchema = z.object({
 
 const GetRiskStatusSchema = z.object({});
 
+// Fundamental data schemas
+const GetFilingSchema = z.object({
+  symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
+  formType: z.enum(["10-K", "10-Q", "8-K"]).optional().describe("SEC form type (default: 10-K)"),
+  sections: z.array(z.enum(["business", "risk_factors", "mda", "financials"])).optional()
+    .describe("Specific sections to extract (for 10-K only)"),
+});
+
+const GetFinancialsSchema = z.object({
+  symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
+});
+
+const GetNewsSchema = z.object({
+  symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
+  limit: z.number().int().min(1).max(50).optional().describe("Max articles to return (default: 20)"),
+});
+
+const GetRecentFilingsSchema = z.object({
+  symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
+  formTypes: z.array(z.string()).optional().describe("Filter by form types (e.g., 10-K, 10-Q, 8-K)"),
+  limit: z.number().int().min(1).max(50).optional().describe("Max filings to return (default: 10)"),
+});
+
+const GetAgentSignalsSchema = z.object({
+  symbol: z.string().min(1).max(10).optional().describe("Filter by stock symbol"),
+  maxAge: z.number().int().min(1).optional().describe("Max signal age in hours (default: 24)"),
+});
+
+// Exa AI search schemas
+const ExaSearchSchema = z.object({
+  query: z.string().min(1).describe("Search query"),
+  category: z.enum(["financial report", "news", "company", "research paper"]).optional()
+    .describe("Search category (default: auto-detect)"),
+  numResults: z.number().int().min(1).max(50).optional().describe("Number of results (default: 10)"),
+  daysBack: z.number().int().min(1).max(365).optional().describe("Limit to recent content (days)"),
+});
+
+const ExaFinancialSearchSchema = z.object({
+  symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
+  searchType: z.enum(["reports", "news", "earnings", "analyst", "competitors"]).describe("Type of financial content to search"),
+  numResults: z.number().int().min(1).max(20).optional().describe("Number of results (default: 10)"),
+});
+
 // Types
 type PlaceOrderInput = z.infer<typeof PlaceOrderSchema>;
 type CancelOrderInput = z.infer<typeof CancelOrderSchema>;
 type GetMarketDataInput = z.infer<typeof GetMarketDataSchema>;
 type GetPortfolioInput = z.infer<typeof GetPortfolioSchema>;
+type GetFilingInput = z.infer<typeof GetFilingSchema>;
+type GetFinancialsInput = z.infer<typeof GetFinancialsSchema>;
+type GetNewsInput = z.infer<typeof GetNewsSchema>;
+type GetRecentFilingsInput = z.infer<typeof GetRecentFilingsSchema>;
+type GetAgentSignalsInput = z.infer<typeof GetAgentSignalsSchema>;
+type ExaSearchInput = z.infer<typeof ExaSearchSchema>;
+type ExaFinancialSearchInput = z.infer<typeof ExaFinancialSearchSchema>;
 
 export interface TradingMCPServerDeps {
   portfolioManager: PortfolioManager;
@@ -323,6 +376,246 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
         };
       },
     },
+
+    // Fundamental data tools
+    get_filing: {
+      description: "Get SEC filing content (10-K, 10-Q, 8-K) for fundamental analysis. For 10-K, can extract specific sections like business description, risk factors, and management discussion.",
+      inputSchema: GetFilingSchema,
+      handler: async (input: GetFilingInput) => {
+        const edgar = getEdgarProvider();
+        const formType = input.formType || "10-K";
+
+        try {
+          if (formType === "10-K" && input.sections && input.sections.length > 0) {
+            const sections = await edgar.get10KSections(
+              input.symbol,
+              input.sections as ("business" | "risk_factors" | "mda" | "financials")[]
+            );
+            return {
+              success: true,
+              symbol: input.symbol,
+              formType,
+              sections,
+              timestamp: new Date().toISOString(),
+            };
+          } else {
+            const { filing, text } = await edgar.getFilingText(input.symbol, formType);
+            return {
+              success: true,
+              symbol: input.symbol,
+              filing,
+              text: text.slice(0, 50000), // Limit text size
+              truncated: text.length > 50000,
+              timestamp: new Date().toISOString(),
+            };
+          }
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch ${formType} for ${input.symbol}: ${error}`,
+          };
+        }
+      },
+    },
+
+    get_financials: {
+      description: "Get key financial metrics from SEC filings including revenue, margins, debt ratios, and profitability metrics.",
+      inputSchema: GetFinancialsSchema,
+      handler: async (input: GetFinancialsInput) => {
+        const edgar = getEdgarProvider();
+
+        try {
+          const metrics = await edgar.getFinancialFacts(input.symbol);
+          if (!metrics) {
+            return {
+              success: false,
+              error: `No financial data available for ${input.symbol}`,
+            };
+          }
+          return {
+            success: true,
+            symbol: input.symbol,
+            metrics,
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch financials for ${input.symbol}: ${error}`,
+          };
+        }
+      },
+    },
+
+    get_news: {
+      description: "Get recent news articles and sentiment scores for a stock. Includes headlines, sources, and sentiment analysis when available.",
+      inputSchema: GetNewsSchema,
+      handler: async (input: GetNewsInput) => {
+        const newsProvider = getNewsProvider();
+        const limit = input.limit || 20;
+
+        try {
+          const news = await newsProvider.getNews(input.symbol, limit);
+          const sentiment = newsProvider.calculateAggregateSentiment(news);
+
+          return {
+            success: true,
+            symbol: input.symbol,
+            articleCount: news.length,
+            sentiment,
+            articles: news.slice(0, 10).map(n => ({
+              title: n.title,
+              source: n.source,
+              publishedAt: n.publishedAt,
+              sentiment: n.sentiment,
+              summary: n.summary?.slice(0, 200),
+            })),
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch news for ${input.symbol}: ${error}`,
+          };
+        }
+      },
+    },
+
+    get_recent_filings: {
+      description: "List recent SEC filings for a company with filing dates and links.",
+      inputSchema: GetRecentFilingsSchema,
+      handler: async (input: GetRecentFilingsInput) => {
+        const edgar = getEdgarProvider();
+        const limit = input.limit || 10;
+
+        try {
+          const filings = await edgar.getFilings(input.symbol, input.formTypes, limit);
+          return {
+            success: true,
+            symbol: input.symbol,
+            filings,
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch filings for ${input.symbol}: ${error}`,
+          };
+        }
+      },
+    },
+
+    // Exa AI search tools
+    exa_search: {
+      description: "AI-powered semantic search using Exa. Search for financial reports, news, company info, or research papers with natural language queries.",
+      inputSchema: ExaSearchSchema,
+      handler: async (input: ExaSearchInput) => {
+        try {
+          const exa = getExaProvider();
+          const startDate = input.daysBack
+            ? new Date(Date.now() - input.daysBack * 24 * 60 * 60 * 1000)
+            : undefined;
+
+          const results = await exa.search(input.query, {
+            category: input.category as ExaCategory | undefined,
+            numResults: input.numResults || 10,
+            startDate,
+            includeText: true,
+          });
+
+          return {
+            success: true,
+            query: input.query,
+            category: input.category || 'auto',
+            resultCount: results.length,
+            results: results.map(r => ({
+              title: r.title,
+              url: r.url,
+              publishedDate: r.publishedDate,
+              text: r.text?.slice(0, 1000), // Limit text size
+              score: r.score,
+            })),
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Exa search failed: ${error}`,
+          };
+        }
+      },
+    },
+
+    exa_financial_search: {
+      description: "Search for specific financial content using Exa AI. Find reports, news, earnings calls, analyst research, or competitor analysis for a stock.",
+      inputSchema: ExaFinancialSearchSchema,
+      handler: async (input: ExaFinancialSearchInput) => {
+        try {
+          const exa = getExaProvider();
+          const numResults = input.numResults || 10;
+
+          let results;
+          switch (input.searchType) {
+            case 'reports':
+              results = await exa.searchFinancialReports(`${input.symbol} 10-K 10-Q annual quarterly report`, {
+                numResults,
+              });
+              break;
+            case 'news':
+              results = await exa.searchNews(`${input.symbol} stock`, {
+                numResults,
+                startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+              });
+              break;
+            case 'earnings':
+              const earnings = await exa.getEarningsCallTranscripts(input.symbol, {
+                limit: numResults,
+              });
+              return {
+                success: true,
+                symbol: input.symbol,
+                searchType: input.searchType,
+                resultCount: earnings.length,
+                results: earnings.map(e => ({
+                  title: e.title,
+                  url: e.url,
+                  date: e.date,
+                  text: e.text?.slice(0, 2000),
+                })),
+                timestamp: new Date().toISOString(),
+              };
+            case 'analyst':
+              results = await exa.getAnalystResearch(input.symbol, { limit: numResults });
+              break;
+            case 'competitors':
+              results = await exa.getCompetitorAnalysis(input.symbol, { limit: numResults });
+              break;
+            default:
+              results = await exa.search(`${input.symbol}`, { numResults });
+          }
+
+          return {
+            success: true,
+            symbol: input.symbol,
+            searchType: input.searchType,
+            resultCount: results.length,
+            results: results.map(r => ({
+              title: r.title,
+              url: r.url,
+              publishedDate: r.publishedDate,
+              text: r.text?.slice(0, 1000),
+              score: r.score,
+            })),
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Exa financial search failed: ${error}`,
+          };
+        }
+      },
+    },
   };
 }
 
@@ -333,4 +626,11 @@ export {
   GetMarketDataSchema,
   GetPortfolioSchema,
   GetRiskStatusSchema,
+  GetFilingSchema,
+  GetFinancialsSchema,
+  GetNewsSchema,
+  GetRecentFilingsSchema,
+  GetAgentSignalsSchema,
+  ExaSearchSchema,
+  ExaFinancialSearchSchema,
 };
