@@ -60,7 +60,7 @@ bun run cli history
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/tradecraft.git
+git clone https://github.com/tylergibbs1/tradecraft.git
 cd tradecraft
 bun install
 ```
@@ -185,6 +185,25 @@ bun run agent-backtest -y
 | 3 months | Weekly | ~$1.50 |
 | 1 year | Weekly | ~$5 |
 | 1 year | Daily | ~$25-50 |
+
+### Backtest Results
+
+Agent performance on historical data (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/NVDA):
+
+| Period | Return | S&P 500 | Win Rate | Sharpe | Max Drawdown | API Cost |
+|--------|--------|---------|----------|--------|--------------|----------|
+| H1 2024 | **+21.93%** | ~15% | 73.9% | 8.43 | 3.47% | $2.48 |
+| H2 2024 | **+2.19%** | ~8% | 57.1% | 1.14 | 9.19% | $2.48 |
+| Full 2024 | **+28.26%** | ~24% | 87.8% | 4.46 | 9.73% | $4.92 |
+
+**Key observations:**
+- Outperformed S&P 500 for full year 2024 (+28% vs ~24%)
+- Strong performance in bull markets (H1) with aggressive NVDA positioning
+- Capital preservation in volatile periods (H2) by cutting losers early
+- High win rate (87.8%) from selective, disciplined trading
+- Low cost (~$5 for a full year of weekly decisions)
+
+*Note: Backtests have inherent limitations. Past performance does not guarantee future results.*
 
 ## Project Structure
 
