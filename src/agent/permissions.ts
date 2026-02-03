@@ -2,6 +2,11 @@ import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
 import { PortfolioManager } from "../portfolio/manager.js";
 import { DataManager } from "../data/index.js";
 import { AgentState } from "./types.js";
+import { OrderType, OrderSide } from "../risk/types.js";
+
+// Valid enum values for runtime validation
+const VALID_ORDER_TYPES: OrderType[] = ["market", "limit", "stop", "stop_limit"];
+const VALID_ORDER_SIDES: OrderSide[] = ["buy", "sell"];
 
 export interface CanUseToolContext {
   riskMonitor: RiskMonitor;
@@ -62,7 +67,24 @@ export function createCanUseTool(ctx: CanUseToolContext) {
     if (tool === "place_order") {
       const symbol = input.symbol as string;
       const quantity = input.quantity as number;
-      const side = input.side as "buy" | "sell";
+      const side = input.side as string;
+      const orderType = input.type as string;
+
+      // Validate side enum
+      if (!VALID_ORDER_SIDES.includes(side as OrderSide)) {
+        return {
+          allowed: false,
+          reason: `Invalid order side: ${side}. Must be one of: ${VALID_ORDER_SIDES.join(", ")}`,
+        };
+      }
+
+      // Validate type enum if provided
+      if (orderType && !VALID_ORDER_TYPES.includes(orderType as OrderType)) {
+        return {
+          allowed: false,
+          reason: `Invalid order type: ${orderType}. Must be one of: ${VALID_ORDER_TYPES.join(", ")}`,
+        };
+      }
 
       // Get current price for validation
       try {
@@ -104,8 +126,8 @@ export function createCanUseTool(ctx: CanUseToolContext) {
         const validation = riskMonitor.preValidate(
           {
             symbol,
-            side,
-            type: (input.type as "market" | "limit" | "stop" | "stop_limit") ?? "market",
+            side: side as OrderSide,
+            type: (orderType as OrderType) ?? "market",
             quantity,
             price: input.price as number | undefined,
             stopPrice: input.stopPrice as number | undefined,

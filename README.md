@@ -25,10 +25,12 @@ Positions:
 
 ## Features
 
+- **Multi-Agent Swarm**: 4 specialist agents (fundamental, technical, sentiment, macro) analyze in parallel
+- **Real-Time Dashboard**: Next.js web UI with live streaming agent output
 - **Autonomous Trading**: Claude analyzes markets and executes trades independently
 - **Risk Management**: Hard limits on position size, daily loss, drawdown—enforced by system, not prompts
 - **Paper Trading**: Safe simulation with real market data from Yahoo Finance
-- **CLI Interface**: Non-interactive commands for easy automation
+- **Claude Agent SDK**: Real-time streaming with `includePartialMessages` for live UI updates
 - **Agent Backtesting**: Test the actual Claude agent on historical data
 - **Full Audit Trail**: Every decision logged for review
 
@@ -113,6 +115,49 @@ paperTrading = true
 | `bun run cli risk` | Check risk limits and circuit breaker |
 | `bun run cli order <side> <symbol> <qty>` | Manual order |
 | `bun run cli reset` | Reset portfolio to initial state |
+| `bun run cli swarm` | Run multi-agent swarm analysis |
+
+## Multi-Agent Swarm
+
+The swarm mode runs 4 specialist agents in parallel, each analyzing from a different perspective:
+
+```bash
+# Start swarm analysis
+bun run cli swarm
+
+# With options
+bun run cli swarm --symbols AAPL,NVDA --cycles 5
+```
+
+### Specialist Agents
+
+| Agent | Focus |
+|-------|-------|
+| **Fundamental** | Financial statements, earnings, valuation metrics |
+| **Technical** | Price action, moving averages, RSI, support/resistance |
+| **Sentiment** | News sentiment, social media, analyst ratings |
+| **Macro** | Economic indicators, Fed policy, sector rotation |
+
+Each agent publishes signals to a shared bus. A consensus algorithm weighs the signals to generate trading recommendations.
+
+## Web Dashboard
+
+A real-time Next.js dashboard for monitoring the swarm:
+
+```bash
+# Start the dashboard
+bun run dashboard
+
+# Opens at http://localhost:3000
+```
+
+### Features
+
+- **Live Streaming**: Text streams in real-time as agents analyze (100ms updates)
+- **Specialist Panels**: See each agent's status, current symbol, and output
+- **Consensus View**: Weighted scores and recommendations per symbol
+- **Tool Progress**: See which tools agents are using in real-time
+- **Portfolio Overview**: Positions, P&L, and trade history
 
 ## How It Works
 
@@ -308,18 +353,28 @@ Agent performance on historical data (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/
 ```
 tradecraft/
 ├── src/
-│   ├── agent/           # Trading agent and tools
+│   ├── agent/           # Single-agent trading
 │   │   ├── index.ts     # TradingAgent class
 │   │   ├── mcp-server.ts # Tool definitions
 │   │   └── prompts.ts   # System and cycle prompts
+│   ├── agents/          # Multi-agent swarm
+│   │   ├── base.ts      # ResearchAgent base class (Claude Agent SDK)
+│   │   ├── portfolio-manager.ts # Swarm orchestrator
+│   │   ├── signal-bus.ts # Inter-agent communication
+│   │   ├── consensus.ts # Signal aggregation
+│   │   └── specialists/ # Specialist agent implementations
 │   ├── backtest/        # Backtesting engines
-│   │   ├── engine.ts    # Rule-based backtester
-│   │   └── agent-engine.ts # Claude agent backtester
 │   ├── config/          # Configuration schemas
 │   ├── data/            # Market data providers
 │   ├── portfolio/       # Position management
 │   ├── risk/            # Risk monitoring
 │   └── cli.ts           # CLI interface
+├── ui/                  # Next.js dashboard
+│   ├── app/             # App router pages
+│   │   ├── api/         # SSE endpoints (swarm, control)
+│   │   └── control/     # Swarm control panel
+│   └── components/
+│       └── swarm/       # SpecialistPanel, ConsensusPanel
 ├── data/                # Persisted state
 ├── AGENT_GUIDE.md       # Guide for AI agents
 └── README.md

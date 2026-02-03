@@ -2,12 +2,11 @@
  * Base Research Agent
  *
  * Abstract base class for all specialist research agents.
- * Provides common functionality for running analysis cycles,
- * interacting with Claude, and publishing signals.
+ * Uses the Claude Agent SDK for tool execution and streaming.
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import Anthropic from '@anthropic-ai/sdk';
+import { query, Options, HookCallback, HookInput, HookJSONOutput } from '@anthropic-ai/claude-agent-sdk';
 import {
   AgentSignal,
   AgentRole,
@@ -16,49 +15,49 @@ import {
   AgentCycleContext,
   SignalStrength,
   SignalTimeframe,
+  SwarmCallbacks,
+  AgentAnalysisResult,
 } from './types.js';
 import { SignalBus, getSharedSignalBus } from './signal-bus.js';
 
 export interface ResearchAgentDependencies {
   apiKey: string;
   signalBus?: SignalBus;
+  callbacks?: SwarmCallbacks;
 }
 
-export interface AnalysisCycleResult {
-  cycleId: string;
-  agentId: string;
-  role: AgentRole;
-  startedAt: string;
-  completedAt: string;
-  symbolsAnalyzed: string[];
-  signalsPublished: number;
-  tokensUsed: number;
-  costUsd: number;
-  error?: string;
-}
+// Re-export for backward compatibility
+export type AnalysisCycleResult = AgentAnalysisResult;
 
 export interface ToolDefinition {
   name: string;
   description: string;
-  inputSchema: Anthropic.Tool.InputSchema;
+  inputSchema: Record<string, unknown>;
   handler: (input: Record<string, unknown>) => Promise<unknown>;
 }
 
 export abstract class ResearchAgent {
-  protected client: Anthropic;
   protected config: ResearchAgentConfig;
   protected signalBus: SignalBus;
   protected tools: Map<string, ToolDefinition> = new Map();
+  protected callbacks?: SwarmCallbacks;
 
   constructor(config: ResearchAgentConfig, deps: ResearchAgentDependencies) {
     this.config = config;
-    this.client = new Anthropic({ apiKey: deps.apiKey });
     this.signalBus = deps.signalBus || getSharedSignalBus();
+    this.callbacks = deps.callbacks;
 
     // Register tools provided by subclass
     for (const tool of this.getTools()) {
       this.tools.set(tool.name, tool);
     }
+  }
+
+  /**
+   * Update callbacks (for dynamic wiring)
+   */
+  setCallbacks(callbacks: SwarmCallbacks): void {
+    this.callbacks = callbacks;
   }
 
   /**
@@ -103,6 +102,14 @@ export abstract class ResearchAgent {
   ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[];
 
   /**
+   * Get the list of allowed tool names for the Agent SDK
+   */
+  protected getAllowedTools(): string[] {
+    // Include built-in tools plus custom tools
+    return ['WebSearch', 'WebFetch', ...Array.from(this.tools.keys())];
+  }
+
+  /**
    * Run an analysis cycle for specified symbols
    */
   async runCycle(
@@ -117,6 +124,9 @@ export abstract class ResearchAgent {
 
     try {
       for (const symbol of symbolsToAnalyze) {
+        // Emit agent start callback
+        this.callbacks?.onAgentStart?.(this.agentId, this.role, symbol);
+
         const context = await this.buildResearchContext(symbol, cycleContext);
         const result = await this.analyzeSymbol(symbol, context);
 
@@ -127,8 +137,11 @@ export abstract class ResearchAgent {
 
         for (const signal of signals) {
           if (signal.confidence >= (this.config.signalThreshold || 0.5)) {
-            this.publishSignal(symbol, signal);
+            const publishedSignal = this.publishSignal(symbol, signal);
             signalsPublished++;
+
+            // Emit signal published callback
+            this.callbacks?.onSignalPublished?.(publishedSignal);
           }
 
           // Respect max signals per cycle
@@ -148,7 +161,7 @@ export abstract class ResearchAgent {
         }
       }
 
-      return {
+      const result: AnalysisCycleResult = {
         cycleId,
         agentId: this.agentId,
         role: this.role,
@@ -159,8 +172,18 @@ export abstract class ResearchAgent {
         tokensUsed,
         costUsd: this.estimateCost(tokensUsed),
       };
+
+      // Emit agent complete callback
+      this.callbacks?.onAgentComplete?.(this.agentId, result);
+
+      return result;
     } catch (error) {
-      return {
+      const errorStr = String(error);
+
+      // Emit agent error callback
+      this.callbacks?.onAgentError?.(this.agentId, errorStr);
+
+      const result: AnalysisCycleResult = {
         cycleId,
         agentId: this.agentId,
         role: this.role,
@@ -170,13 +193,18 @@ export abstract class ResearchAgent {
         signalsPublished,
         tokensUsed,
         costUsd: this.estimateCost(tokensUsed),
-        error: String(error),
+        error: errorStr,
       };
+
+      // Emit agent complete callback even on error
+      this.callbacks?.onAgentComplete?.(this.agentId, result);
+
+      return result;
     }
   }
 
   /**
-   * Analyze a single symbol
+   * Analyze a single symbol using the Claude Agent SDK
    */
   protected async analyzeSymbol(
     symbol: string,
@@ -185,100 +213,77 @@ export abstract class ResearchAgent {
     const systemPrompt = this.getSystemPrompt();
     const userPrompt = this.buildAnalysisPrompt(symbol, context);
 
-    const anthropicTools: Anthropic.Tool[] = Array.from(this.tools.values()).map(
-      tool => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.inputSchema,
-      })
-    );
-
-    const messages: Anthropic.MessageParam[] = [
-      { role: 'user', content: userPrompt },
-    ];
-
-    let totalTokens = 0;
     let fullResponse = '';
-    let turns = 0;
-    const maxTurns = 5;
+    let tokensUsed = 0;
+    let currentToolName: string | null = null;
 
-    while (turns < maxTurns) {
-      turns++;
+    // Build hooks for tool callbacks
+    const preToolUseHook: HookCallback = async (
+      input: HookInput,
+      _toolUseID: string | undefined,
+      _opts: { signal: AbortSignal }
+    ): Promise<HookJSONOutput> => {
+      const toolName = (input as any).tool_name || 'unknown';
+      currentToolName = toolName;
+      this.callbacks?.onToolStart?.(this.agentId, toolName);
+      return { continue: true };
+    };
 
-      const response = await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: this.config.maxTokens,
-        system: systemPrompt,
-        tools: anthropicTools.length > 0 ? anthropicTools : undefined,
-        messages,
-      });
+    const postToolUseHook: HookCallback = async (
+      input: HookInput,
+      _toolUseID: string | undefined,
+      _opts: { signal: AbortSignal }
+    ): Promise<HookJSONOutput> => {
+      const toolName = (input as any).tool_name || currentToolName || 'unknown';
+      this.callbacks?.onToolComplete?.(this.agentId, toolName, 0);
+      currentToolName = null;
+      return { continue: true };
+    };
 
-      totalTokens += (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+    // Configure Agent SDK options
+    const options: Options = {
+      systemPrompt,
+      allowedTools: this.getAllowedTools(),
+      maxTurns: 5,
+      permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
+      includePartialMessages: true,
+      hooks: {
+        PreToolUse: [{ matcher: '.*', hooks: [preToolUseHook] }],
+        PostToolUse: [{ matcher: '.*', hooks: [postToolUseHook] }],
+      },
+    };
 
-      // Collect tool uses and text
-      const toolUseBlocks: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
-
-      for (const block of response.content) {
-        if (block.type === 'text') {
-          fullResponse += block.text + '\n';
-        } else if (block.type === 'tool_use') {
-          toolUseBlocks.push({
-            id: block.id,
-            name: block.name,
-            input: block.input as Record<string, unknown>,
-          });
-        }
-      }
-
-      // If no tool use, we're done
-      if (toolUseBlocks.length === 0) {
-        break;
-      }
-
-      // Process all tool calls
-      const toolResults: Array<{
-        type: 'tool_result';
-        tool_use_id: string;
-        content: string;
-        is_error?: boolean;
-      }> = [];
-
-      for (const toolBlock of toolUseBlocks) {
-        const tool = this.tools.get(toolBlock.name);
-        if (tool) {
-          try {
-            const result = await tool.handler(toolBlock.input);
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolBlock.id,
-              content: JSON.stringify(result),
-            });
-          } catch (error) {
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: toolBlock.id,
-              content: JSON.stringify({ error: String(error) }),
-              is_error: true,
-            });
+    // Run the query with streaming
+    for await (const message of query({ prompt: userPrompt, options })) {
+      // Handle streaming events for real-time text updates
+      if (message.type === 'stream_event') {
+        const event = (message as any).event;
+        if (event?.type === 'content_block_delta') {
+          const delta = event.delta;
+          if (delta?.type === 'text_delta' && !currentToolName) {
+            // Emit text delta for UI streaming
+            this.callbacks?.onTextDelta?.(this.agentId, delta.text);
           }
-        } else {
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: toolBlock.id,
-            content: JSON.stringify({ error: `Unknown tool: ${toolBlock.name}` }),
-            is_error: true,
-          });
         }
       }
 
-      // Add messages for next turn
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
+      // Capture the final result
+      if ('result' in message && typeof message.result === 'string') {
+        fullResponse = message.result;
+      }
+
+      // Track token usage from assistant messages
+      if (message.type === 'assistant') {
+        // Estimate tokens from message length (rough approximation)
+        const msgText = JSON.stringify((message as any).message?.content || '');
+        tokensUsed += Math.ceil(msgText.length / 4);
+      }
     }
 
     return {
       response: fullResponse.trim(),
-      tokensUsed: totalTokens,
+      tokensUsed,
     };
   }
 

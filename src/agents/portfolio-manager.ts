@@ -18,6 +18,10 @@ import {
   AgentWeights,
   DEFAULT_AGENT_WEIGHTS,
   PriceBar,
+  SwarmCallbacks,
+  SwarmCycleResult,
+  TradeDecision,
+  AgentAnalysisResult,
 } from './types.js';
 import { SignalBus, getSharedSignalBus } from './signal-bus.js';
 import { ResearchAgent, AnalysisCycleResult } from './base.js';
@@ -44,28 +48,10 @@ export interface PortfolioManagerDependencies {
   signalBus?: SignalBus;
   priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
   exaApiKey?: string;
+  callbacks?: SwarmCallbacks;
 }
 
-export interface TradeDecision {
-  symbol: string;
-  action: 'BUY' | 'SELL' | 'HOLD';
-  quantity?: number;
-  reason: string;
-  consensus: ConsensusResult;
-  confidence: number;
-}
-
-export interface SwarmCycleResult {
-  cycleId: string;
-  startedAt: string;
-  completedAt: string;
-  symbolsAnalyzed: string[];
-  specialistResults: AnalysisCycleResult[];
-  tradeDecisions: TradeDecision[];
-  totalTokensUsed: number;
-  totalCostUsd: number;
-  error?: string;
-}
+// TradeDecision and SwarmCycleResult are imported from types.ts
 
 export class PortfolioManagerAgent {
   private client: Anthropic;
@@ -73,6 +59,7 @@ export class PortfolioManagerAgent {
   private signalBus: SignalBus;
   private specialists: ResearchAgent[];
   private weights: AgentWeights;
+  private callbacks?: SwarmCallbacks;
 
   constructor(
     config: PortfolioManagerConfig,
@@ -82,11 +69,12 @@ export class PortfolioManagerAgent {
     this.client = new Anthropic({ apiKey: deps.apiKey });
     this.signalBus = deps.signalBus || getSharedSignalBus();
     this.weights = { ...DEFAULT_AGENT_WEIGHTS, ...config.weights };
+    this.callbacks = deps.callbacks;
 
     // Update signal bus weights
     this.signalBus.setWeights(this.weights);
 
-    // Initialize specialist agents
+    // Initialize specialist agents with callbacks
     const baseConfig = {
       model: config.model,
       maxTokens: config.maxTokens,
@@ -96,21 +84,32 @@ export class PortfolioManagerAgent {
     this.specialists = [
       new FundamentalAnalyst(
         { ...baseConfig, agentId: `${config.agentId}-fundamental` },
-        { apiKey: deps.apiKey, signalBus: this.signalBus }
+        { apiKey: deps.apiKey, signalBus: this.signalBus, callbacks: this.callbacks }
       ),
       new TechnicalAnalyst(
         { ...baseConfig, agentId: `${config.agentId}-technical` },
-        { apiKey: deps.apiKey, signalBus: this.signalBus, priceDataFetcher: deps.priceDataFetcher }
+        { apiKey: deps.apiKey, signalBus: this.signalBus, priceDataFetcher: deps.priceDataFetcher, callbacks: this.callbacks }
       ),
       new SentimentAnalyst(
         { ...baseConfig, agentId: `${config.agentId}-sentiment` },
-        { apiKey: deps.apiKey, signalBus: this.signalBus, exaApiKey: deps.exaApiKey }
+        { apiKey: deps.apiKey, signalBus: this.signalBus, exaApiKey: deps.exaApiKey, callbacks: this.callbacks }
       ),
       new MacroAnalyst(
         { ...baseConfig, agentId: `${config.agentId}-macro` },
-        { apiKey: deps.apiKey, signalBus: this.signalBus, priceDataFetcher: deps.priceDataFetcher }
+        { apiKey: deps.apiKey, signalBus: this.signalBus, priceDataFetcher: deps.priceDataFetcher, callbacks: this.callbacks }
       ),
     ];
+  }
+
+  /**
+   * Update callbacks dynamically
+   */
+  setCallbacks(callbacks: SwarmCallbacks): void {
+    this.callbacks = callbacks;
+    // Update callbacks on all specialists
+    for (const specialist of this.specialists) {
+      specialist.setCallbacks(callbacks);
+    }
   }
 
   /**
@@ -130,6 +129,9 @@ export class PortfolioManagerAgent {
     const startedAt = new Date().toISOString();
     const symbols = options?.symbolsToAnalyze || this.config.tradingUniverse;
     const runParallel = options?.parallelSpecialists ?? true;
+
+    // Emit cycle start callback
+    this.callbacks?.onCycleStart?.(cycleId);
 
     // Prune stale signals before new cycle
     this.signalBus.pruneStale();
@@ -160,11 +162,14 @@ export class PortfolioManagerAgent {
         totalTokensUsed += result.tokensUsed;
       }
 
-      // Get consensus for each symbol
+      // Get consensus for each symbol and emit updates
       const tradeDecisions: TradeDecision[] = [];
 
       for (const symbol of symbols) {
         const consensus = this.signalBus.getConsensus(symbol, this.weights);
+
+        // Emit consensus update callback
+        this.callbacks?.onConsensusUpdate?.(symbol, consensus);
 
         // Only act on signals with sufficient confidence
         if (consensus.signalCount > 0 &&
@@ -181,7 +186,7 @@ export class PortfolioManagerAgent {
         Math.abs(b.consensus.weightedScore) - Math.abs(a.consensus.weightedScore)
       );
 
-      return {
+      const result: SwarmCycleResult = {
         cycleId,
         startedAt,
         completedAt: new Date().toISOString(),
@@ -191,8 +196,13 @@ export class PortfolioManagerAgent {
         totalTokensUsed,
         totalCostUsd: (totalTokensUsed / 1_000_000) * 9,
       };
+
+      // Emit cycle complete callback
+      this.callbacks?.onCycleComplete?.(result);
+
+      return result;
     } catch (error) {
-      return {
+      const result: SwarmCycleResult = {
         cycleId,
         startedAt,
         completedAt: new Date().toISOString(),
@@ -203,6 +213,11 @@ export class PortfolioManagerAgent {
         totalCostUsd: (totalTokensUsed / 1_000_000) * 9,
         error: String(error),
       };
+
+      // Emit cycle complete callback even on error
+      this.callbacks?.onCycleComplete?.(result);
+
+      return result;
     }
   }
 
@@ -348,6 +363,7 @@ export function createSwarm(
     model?: string;
     priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
     exaApiKey?: string;
+    callbacks?: SwarmCallbacks;
   }
 ): PortfolioManagerAgent {
   return new PortfolioManagerAgent(
@@ -364,6 +380,7 @@ export function createSwarm(
       apiKey: config.apiKey,
       priceDataFetcher: config.priceDataFetcher,
       exaApiKey: config.exaApiKey,
+      callbacks: config.callbacks,
     }
   );
 }

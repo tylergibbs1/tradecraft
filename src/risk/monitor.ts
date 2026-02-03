@@ -20,8 +20,33 @@ export class RiskMonitor {
   private circuitBreaker: CircuitBreaker;
 
   constructor(limits: RiskLimits) {
+    // Validate risk limits are in valid ranges
+    this.validateLimits(limits);
     this.limits = limits;
     this.circuitBreaker = new CircuitBreaker();
+  }
+
+  private validateLimits(limits: RiskLimits): void {
+    // Validate percentages are between 0 and 1
+    if (limits.maxPositionSize <= 0 || limits.maxPositionSize > 1) {
+      throw new Error(`Invalid maxPositionSize: ${limits.maxPositionSize}. Must be between 0 and 1.`);
+    }
+    if (limits.dailyLossLimit <= 0 || limits.dailyLossLimit > 1) {
+      throw new Error(`Invalid dailyLossLimit: ${limits.dailyLossLimit}. Must be between 0 and 1.`);
+    }
+    if (limits.weeklyLossLimit <= 0 || limits.weeklyLossLimit > 1) {
+      throw new Error(`Invalid weeklyLossLimit: ${limits.weeklyLossLimit}. Must be between 0 and 1.`);
+    }
+    if (limits.maxDrawdown <= 0 || limits.maxDrawdown > 1) {
+      throw new Error(`Invalid maxDrawdown: ${limits.maxDrawdown}. Must be between 0 and 1.`);
+    }
+    // Validate positive integers/numbers
+    if (limits.maxPositionCount < 1 || !Number.isInteger(limits.maxPositionCount)) {
+      throw new Error(`Invalid maxPositionCount: ${limits.maxPositionCount}. Must be a positive integer.`);
+    }
+    if (limits.maxOrderValue <= 0) {
+      throw new Error(`Invalid maxOrderValue: ${limits.maxOrderValue}. Must be positive.`);
+    }
   }
 
   /**
@@ -49,15 +74,20 @@ export class RiskMonitor {
       ? existingPosition.quantity * existingPosition.currentPrice
       : 0;
     const newPositionValue = existingValue + positionValue;
-    const positionPercent = Math.abs(newPositionValue) / portfolio.equity;
+
+    // Guard against division by zero
+    const equity = portfolio.equity > 0 ? portfolio.equity : 1;
+    const peakEquity = portfolio.peakEquity > 0 ? portfolio.peakEquity : 1;
+
+    const positionPercent = Math.abs(newPositionValue) / equity;
 
     // Risk metrics for response
     const riskMetrics = {
       positionValue: Math.abs(newPositionValue),
       positionPercent,
-      currentDailyLoss: portfolio.dailyPnL < 0 ? Math.abs(portfolio.dailyPnL) / portfolio.equity : 0,
-      currentWeeklyLoss: portfolio.weeklyPnL < 0 ? Math.abs(portfolio.weeklyPnL) / portfolio.equity : 0,
-      currentDrawdown: (portfolio.peakEquity - portfolio.equity) / portfolio.peakEquity,
+      currentDailyLoss: portfolio.dailyPnL < 0 ? Math.abs(portfolio.dailyPnL) / equity : 0,
+      currentWeeklyLoss: portfolio.weeklyPnL < 0 ? Math.abs(portfolio.weeklyPnL) / equity : 0,
+      currentDrawdown: peakEquity > 0 ? (portfolio.peakEquity - portfolio.equity) / peakEquity : 0,
     };
 
     // Check max order value
@@ -120,13 +150,17 @@ export class RiskMonitor {
    * Check portfolio-level risk limits and potentially trip circuit breaker
    */
   checkPortfolioRisk(portfolio: PortfolioSnapshot): ValidationResult {
+    // Guard against division by zero
+    const equity = portfolio.equity > 0 ? portfolio.equity : 1;
+    const peakEquity = portfolio.peakEquity > 0 ? portfolio.peakEquity : 1;
+
     const dailyLossPercent = portfolio.dailyPnL < 0
-      ? Math.abs(portfolio.dailyPnL) / portfolio.equity
+      ? Math.abs(portfolio.dailyPnL) / equity
       : 0;
     const weeklyLossPercent = portfolio.weeklyPnL < 0
-      ? Math.abs(portfolio.weeklyPnL) / portfolio.equity
+      ? Math.abs(portfolio.weeklyPnL) / equity
       : 0;
-    const drawdown = (portfolio.peakEquity - portfolio.equity) / portfolio.peakEquity;
+    const drawdown = (portfolio.peakEquity - portfolio.equity) / peakEquity;
 
     // Check daily loss limit
     if (dailyLossPercent > this.limits.dailyLossLimit) {
@@ -172,8 +206,10 @@ export class RiskMonitor {
   getStatus(portfolio: PortfolioSnapshot): RiskStatus {
     const dailyPnL = portfolio.dailyPnL;
     const weeklyPnL = portfolio.weeklyPnL;
-    const currentDrawdown =
-      (portfolio.peakEquity - portfolio.equity) / portfolio.peakEquity;
+
+    // Guard against division by zero
+    const peakEquity = portfolio.peakEquity > 0 ? portfolio.peakEquity : 1;
+    const currentDrawdown = (portfolio.peakEquity - portfolio.equity) / peakEquity;
 
     return {
       circuitBreaker: this.circuitBreaker.getStatus(),
@@ -198,6 +234,7 @@ export class RiskMonitor {
    * Update risk limits
    */
   updateLimits(limits: RiskLimits): void {
+    this.validateLimits(limits);
     this.limits = limits;
   }
 

@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { DataManager, OHLCV, Quote } from "../data/index.js";
 import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
 import { RiskLimits } from "../config/schema.js";
-import { buildSystemPrompt, buildCyclePrompt } from "../agent/prompts.js";
+import { buildCyclePrompt } from "../agent/prompts.js";
 import { PortfolioState, Position, Order, Trade } from "../portfolio/types.js";
 
 export interface AgentBacktestConfig {
@@ -188,69 +188,6 @@ class SimulatedPortfolio {
   getEquity(prices: Map<string, number>): number {
     return this.getState(prices).equity;
   }
-}
-
-// Convert Zod schema to JSON Schema for Anthropic tools
-function zodToJsonSchema(schema: unknown): Anthropic.Tool.InputSchema {
-  const zodSchema = schema as { shape?: Record<string, unknown> };
-  if (!zodSchema.shape) {
-    return { type: "object", properties: {} };
-  }
-
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-
-  for (const [key, fieldSchema] of Object.entries(zodSchema.shape)) {
-    const field = fieldSchema as {
-      _def?: {
-        type?: string;
-        element?: { type?: string };
-        innerType?: { _def?: { type?: string; element?: { type?: string }; values?: string[] } };
-        values?: string[];
-      };
-      description?: string;
-    };
-    const def = field._def;
-    if (!def) continue;
-
-    let innerDef = def;
-    let isOptional = def.type === "optional";
-    if (isOptional && def.innerType?._def) {
-      innerDef = def.innerType._def;
-    }
-
-    const typeName = innerDef.type;
-    let prop: Record<string, unknown> = {};
-
-    if (typeName === "string") {
-      prop = { type: "string" };
-    } else if (typeName === "number") {
-      prop = { type: "number" };
-    } else if (typeName === "boolean") {
-      prop = { type: "boolean" };
-    } else if (typeName === "array") {
-      const itemType = innerDef.element?.type;
-      prop = { type: "array", items: { type: itemType === "number" ? "number" : "string" } };
-    } else if (typeName === "enum") {
-      prop = { type: "string", enum: innerDef.values };
-    } else {
-      prop = { type: "string" };
-    }
-
-    if (field.description) {
-      prop.description = field.description;
-    }
-    properties[key] = prop;
-    if (!isOptional) {
-      required.push(key);
-    }
-  }
-
-  return {
-    type: "object",
-    properties,
-    required: required.length > 0 ? required : undefined,
-  } as Anthropic.Tool.InputSchema;
 }
 
 export class AgentBacktestEngine {
@@ -494,8 +431,6 @@ export class AgentBacktestEngine {
       return { error: "Unknown tool" };
     };
 
-    // Build prompts
-    const systemPrompt = buildSystemPrompt(this.config.symbols, this.config.allowShorts);
     const portfolioState = portfolio.getState(currentPrices);
 
     // Build a simplified risk status for the cycle prompt
@@ -525,7 +460,7 @@ export class AgentBacktestEngine {
       const response = await this.client.messages.create({
         model: this.config.model,
         max_tokens: 2048,
-        system: systemPrompt,
+        system: `You are an autonomous trading agent. Analyze market data and make trading decisions for symbols: ${this.config.symbols.join(", ")}. ${this.config.allowShorts ? "Short selling is allowed." : "Short selling is NOT allowed."}`,
         tools,
         messages,
       });

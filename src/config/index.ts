@@ -31,9 +31,6 @@ export function loadConfig(): Config {
   if (process.env.POLYGON_API_KEY) {
     envConfig.dataProviderApiKey = process.env.POLYGON_API_KEY;
   }
-  if (process.env.ALPHAVANTAGE_API_KEY) {
-    envConfig.dataProviderApiKey = process.env.ALPHAVANTAGE_API_KEY;
-  }
 
   // Load from file if exists
   if (configExists()) {
@@ -64,7 +61,14 @@ export function saveConfig(config: Config): void {
   const cleanConfig = JSON.parse(JSON.stringify(toSave));
 
   const content = TOML.stringify(cleanConfig as TOML.JsonMap);
-  fs.writeFileSync(CONFIG_FILE, content, "utf-8");
+
+  // Atomic write: write to temp file, then rename
+  const tempFile = CONFIG_FILE + ".tmp";
+  fs.writeFileSync(tempFile, content, "utf-8");
+  fs.renameSync(tempFile, CONFIG_FILE);
+
+  // Set restrictive permissions (owner read/write only) to protect API keys
+  fs.chmodSync(CONFIG_FILE, 0o600);
 }
 
 export function updateConfig(updates: Partial<Config>): Config {

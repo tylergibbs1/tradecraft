@@ -187,3 +187,77 @@ export interface ResearchAgentConfig {
   signalThreshold?: number;     // Min confidence to emit signal
   maxSignalsPerCycle?: number;
 }
+
+// ============================================================================
+// Swarm UI State Types
+// ============================================================================
+
+export type SpecialistStatus = 'idle' | 'analyzing' | 'publishing' | 'done' | 'error';
+
+export interface SpecialistUIState {
+  agentId: string;
+  role: AgentRole;
+  status: SpecialistStatus;
+  currentSymbol?: string;
+  signalsPublished: number;
+  lastMessage?: string;
+  streamingText?: string;
+  lastActivity: string;
+  error?: string;
+}
+
+export interface SwarmUIState {
+  cycleId: string;
+  status: 'idle' | 'running' | 'complete' | 'error';
+  startedAt?: string;
+  specialists: Record<string, SpecialistUIState>;
+  consensusMap: Record<string, ConsensusResult>;
+  activeTools: Record<string, { agentId: string; toolName: string; startedAt: string }>;
+}
+
+export interface SwarmCallbacks {
+  onCycleStart?: (cycleId: string) => void;
+  onCycleComplete?: (result: SwarmCycleResult) => void;
+  onAgentStart?: (agentId: string, role: AgentRole, symbol: string) => void;
+  onAgentComplete?: (agentId: string, result: AgentAnalysisResult) => void;
+  onAgentError?: (agentId: string, error: string) => void;
+  onSignalPublished?: (signal: AgentSignal) => void;
+  onConsensusUpdate?: (symbol: string, consensus: ConsensusResult) => void;
+  onToolStart?: (agentId: string, toolName: string) => void;
+  onToolComplete?: (agentId: string, toolName: string, durationMs: number) => void;
+  onTextDelta?: (agentId: string, text: string) => void;
+}
+
+export interface SwarmCycleResult {
+  cycleId: string;
+  startedAt: string;
+  completedAt: string;
+  symbolsAnalyzed: string[];
+  specialistResults: AgentAnalysisResult[];
+  tradeDecisions: TradeDecision[];
+  totalTokensUsed: number;
+  totalCostUsd: number;
+  error?: string;
+}
+
+export interface AgentAnalysisResult {
+  cycleId: string;
+  agentId: string;
+  role: AgentRole;
+  startedAt: string;
+  completedAt: string;
+  symbolsAnalyzed: string[];
+  signalsPublished: number;
+  tokensUsed: number;
+  costUsd: number;
+  error?: string;
+}
+
+export interface TradeDecision {
+  symbol: string;
+  action: 'BUY' | 'SELL' | 'HOLD';
+  quantity?: number;
+  reason: string;
+  consensus: ConsensusResult;
+  confidence: number;
+}

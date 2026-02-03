@@ -1,0 +1,106 @@
+"use client";
+
+import { SpecialistPanel, type SpecialistUIState, type AgentRole } from "./SpecialistPanel";
+import { ConsensusPanel, type ConsensusResult } from "./ConsensusPanel";
+import { ToolProgressIndicator, type ActiveTool } from "./ToolProgressIndicator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+
+export interface SwarmUIState {
+  cycleId: string;
+  status: "idle" | "running" | "complete" | "error";
+  startedAt?: string;
+  specialists: Record<string, SpecialistUIState>;
+  consensusMap: Record<string, ConsensusResult>;
+  activeTools: Record<string, ActiveTool>;
+}
+
+interface SwarmViewProps {
+  state: SwarmUIState;
+  cycleCount?: number;
+  tokensUsed?: number;
+  costUsd?: number;
+}
+
+const SPECIALIST_ROLES: AgentRole[] = [
+  "fundamental-analyst",
+  "technical-analyst",
+  "sentiment-analyst",
+  "macro-analyst",
+];
+
+const STATUS_BADGE_VARIANTS: Record<SwarmUIState["status"], "default" | "secondary" | "destructive"> = {
+  idle: "secondary",
+  running: "default",
+  complete: "secondary",
+  error: "destructive",
+};
+
+const STATUS_BADGE_CLASSES: Record<SwarmUIState["status"], string> = {
+  idle: "",
+  running: "bg-green-600 animate-pulse",
+  complete: "bg-blue-600",
+  error: "",
+};
+
+export function SwarmView({ state, cycleCount, tokensUsed, costUsd }: SwarmViewProps) {
+  return (
+    <div className="space-y-4">
+      {/* Header with status */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-base font-medium">Agent Swarm</CardTitle>
+              <Badge
+                variant={STATUS_BADGE_VARIANTS[state.status]}
+                className={STATUS_BADGE_CLASSES[state.status]}
+              >
+                {state.status.toUpperCase()}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              {cycleCount !== undefined && (
+                <span>Cycle #{cycleCount}</span>
+              )}
+              {tokensUsed !== undefined && (
+                <span>{tokensUsed.toLocaleString()} tokens</span>
+              )}
+              {costUsd !== undefined && (
+                <span>${costUsd.toFixed(4)}</span>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {/* Tool Progress Indicator */}
+      <ToolProgressIndicator activeTools={state.activeTools} />
+
+      {/* Specialist Panels - 2x2 Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {SPECIALIST_ROLES.map((role) => {
+          // Find the specialist state by role
+          const specialistState = Object.values(state.specialists).find(
+            (s) => s.role === role
+          );
+          return (
+            <SpecialistPanel
+              key={role}
+              role={role}
+              state={specialistState}
+            />
+          );
+        })}
+      </div>
+
+      {/* Consensus Panel */}
+      <ConsensusPanel consensusMap={state.consensusMap} />
+    </div>
+  );
+}
+
+export default SwarmView;
+
+// Export types for use in other components
+export type { SpecialistUIState, AgentRole, ConsensusResult, ActiveTool };

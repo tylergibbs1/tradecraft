@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Data provider configuration
-export const DataProviderSchema = z.enum(["polygon", "alphavantage", "yahoo"]);
+export const DataProviderSchema = z.enum(["polygon", "yahoo"]);
 export type DataProvider = z.infer<typeof DataProviderSchema>;
 
 // Risk limits configuration
@@ -18,10 +18,7 @@ export type RiskLimits = z.infer<typeof RiskLimitsSchema>;
 // Trading universe configuration
 export const TradingUniverseSchema = z.object({
   symbols: z.array(z.string()).default([]),
-  sectors: z.array(z.string()).default([]),
-  excludeSymbols: z.array(z.string()).default([]),
   allowShorts: z.boolean().default(false),
-  allowOptions: z.boolean().default(false),
 });
 export type TradingUniverse = z.infer<typeof TradingUniverseSchema>;
 
@@ -31,7 +28,6 @@ export const AgentParamsSchema = z.object({
   maxTurns: z.number().int().min(1).max(50).default(10),
   maxBudgetUsd: z.number().min(0).max(10).default(0.5),
   cycleIntervalMs: z.number().int().min(1000).default(60000), // 1 minute default
-  systemPromptPath: z.string().optional(),
 });
 export type AgentParams = z.infer<typeof AgentParamsSchema>;
 
@@ -55,10 +51,7 @@ const defaultRiskLimits: RiskLimits = {
 
 const defaultTradingUniverse: TradingUniverse = {
   symbols: ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"],
-  sectors: [],
-  excludeSymbols: [],
   allowShorts: false,
-  allowOptions: false,
 };
 
 const defaultAgentParams: AgentParams = {

@@ -15,7 +15,8 @@ export * from './types.js';
 export { SignalBus, getSharedSignalBus, resetSharedSignalBus } from './signal-bus.js';
 
 // Base agent class
-export { ResearchAgent, ResearchAgentDependencies, AnalysisCycleResult } from './base.js';
+export { ResearchAgent } from './base.js';
+export type { ResearchAgentDependencies, AnalysisCycleResult } from './base.js';
 
 // Specialist agents
 export {
@@ -27,11 +28,19 @@ export {
 } from './specialists/index.js';
 
 // Portfolio manager (orchestrator)
-export {
-  PortfolioManagerAgent,
+export { PortfolioManagerAgent, createSwarm } from './portfolio-manager.js';
+export type {
   PortfolioManagerConfig,
   PortfolioManagerDependencies,
-  TradeDecision,
-  SwarmCycleResult,
-  createSwarm,
 } from './portfolio-manager.js';
+
+// Re-export UI state types from types.ts
+export type {
+  SwarmCallbacks,
+  SwarmCycleResult,
+  TradeDecision,
+  AgentAnalysisResult,
+  SpecialistStatus,
+  SpecialistUIState,
+  SwarmUIState,
+} from './types.js';

@@ -110,6 +110,7 @@ export class TradingAgent {
   private tools: ReturnType<typeof createTradingTools>;
   private tradingUniverse: string[];
   private allowShorts: boolean;
+  private cycleInProgress: boolean = false; // Prevent concurrent cycle execution
 
   constructor(deps: AgentDependencies, callbacks: AgentCallbacks = {}) {
     this.deps = deps;
@@ -137,6 +138,7 @@ export class TradingAgent {
       riskMonitor: deps.riskMonitor,
       dataManager: deps.dataManager,
       tradingUniverse: this.tradingUniverse,
+      polygonApiKey: deps.config.dataProviderApiKey,
     };
 
     this.tools = createTradingTools(toolDeps);
@@ -230,20 +232,41 @@ export class TradingAgent {
     }
 
     // Run cycle immediately, then schedule next
-    this.runCycle().then(() => {
-      if (this.state.current === "running") {
-        this.cycleTimer = setTimeout(
-          () => this.scheduleCycle(),
-          this.config.cycleIntervalMs
-        );
-      }
-    });
+    this.runCycle()
+      .catch((error) => {
+        // Log error but don't crash the scheduler
+        this.emitMessage("error", `Cycle scheduler error: ${error}`);
+      })
+      .finally(() => {
+        if (this.state.current === "running") {
+          this.cycleTimer = setTimeout(
+            () => this.scheduleCycle(),
+            this.config.cycleIntervalMs
+          );
+        }
+      });
   }
 
   /**
    * Run a single trading cycle
    */
   async runCycle(): Promise<AgentCycleResult> {
+    // Prevent concurrent cycle execution
+    if (this.cycleInProgress) {
+      return {
+        cycleId: "skipped",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        turnsUsed: 0,
+        tokensUsed: 0,
+        costUsd: 0,
+        ordersPlaced: 0,
+        ordersCancelled: 0,
+        error: "Previous cycle still in progress",
+      };
+    }
+
+    this.cycleInProgress = true;
     const cycleId = uuidv4();
     const startedAt = new Date().toISOString();
     let turnsUsed = 0;
@@ -398,11 +421,18 @@ export class TradingAgent {
             continue;
           }
 
-          // Execute tool
+          // Execute tool with timeout
           const tool = this.tools[toolName as keyof typeof this.tools];
           if (tool) {
             try {
-              const result = await tool.handler(toolInput as never);
+              // Add timeout wrapper for tool execution (30 second timeout)
+              const toolTimeout = 30000;
+              const result = await Promise.race([
+                tool.handler(toolInput as never),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error(`Tool ${toolName} timed out after ${toolTimeout}ms`)), toolTimeout)
+                ),
+              ]);
               await hooks.postToolUse(toolName, toolInput, result, { startTime });
 
               // Track orders
@@ -479,6 +509,8 @@ export class TradingAgent {
       this.callbacks.onCycleComplete?.(result);
 
       return result;
+    } finally {
+      this.cycleInProgress = false;
     }
   }
 

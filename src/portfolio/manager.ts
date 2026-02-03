@@ -51,10 +51,27 @@ export class PortfolioManager {
     try {
       if (fs.existsSync(PORTFOLIO_FILE)) {
         const data = fs.readFileSync(PORTFOLIO_FILE, "utf-8");
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+
+        // Validate required fields exist and have valid types
+        if (
+          typeof parsed.cash !== "number" ||
+          typeof parsed.equity !== "number" ||
+          typeof parsed.peakEquity !== "number" ||
+          typeof parsed.positions !== "object" ||
+          typeof parsed.openOrders !== "object" ||
+          !Array.isArray(parsed.trades) ||
+          isNaN(parsed.cash) ||
+          isNaN(parsed.equity)
+        ) {
+          console.error("Portfolio state file is corrupted, starting fresh");
+          return null;
+        }
+
+        return parsed as PortfolioState;
       }
-    } catch {
-      // Invalid state file
+    } catch (error) {
+      console.error("Error loading portfolio state:", error);
     }
     return null;
   }
@@ -74,12 +91,20 @@ export class PortfolioManager {
   private saveState(): void {
     this.ensureDataDir();
     this.state.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(PORTFOLIO_FILE, JSON.stringify(this.state, null, 2));
+
+    // Atomic write: write to temp file, then rename
+    const tempFile = PORTFOLIO_FILE + ".tmp";
+    fs.writeFileSync(tempFile, JSON.stringify(this.state, null, 2));
+    fs.renameSync(tempFile, PORTFOLIO_FILE);
   }
 
   private saveSnapshots(): void {
     this.ensureDataDir();
-    fs.writeFileSync(SNAPSHOTS_FILE, JSON.stringify(this.snapshots, null, 2));
+
+    // Atomic write: write to temp file, then rename
+    const tempFile = SNAPSHOTS_FILE + ".tmp";
+    fs.writeFileSync(tempFile, JSON.stringify(this.snapshots, null, 2));
+    fs.renameSync(tempFile, SNAPSHOTS_FILE);
   }
 
   /**
@@ -189,7 +214,8 @@ export class PortfolioManager {
         this.rejectOrder(orderId, "Insufficient shares");
         return null;
       }
-      pnl = (fillPrice - position.averageCost) * qty;
+      // Deduct commission from P&L calculation (was missing before)
+      pnl = (fillPrice - position.averageCost) * qty - this.commission;
       this.state.cash += value - this.commission;
       this.state.totalPnL += pnl;
       this.state.dailyPnL += pnl;
@@ -211,13 +237,17 @@ export class PortfolioManager {
     };
     this.state.trades.push(trade);
 
-    // Update order
+    // Update order - fix partial fill averaging formula
+    const previousFilledQty = order.filledQuantity;
     order.filledQuantity += qty;
-    order.averageFillPrice = order.averageFillPrice
-      ? (order.averageFillPrice * (order.filledQuantity - qty) +
-          fillPrice * qty) /
-        order.filledQuantity
-      : fillPrice;
+    if (order.averageFillPrice && previousFilledQty > 0) {
+      // Weighted average of previous fills and new fill
+      order.averageFillPrice =
+        (order.averageFillPrice * previousFilledQty + fillPrice * qty) /
+        order.filledQuantity;
+    } else {
+      order.averageFillPrice = fillPrice;
+    }
     order.updatedAt = new Date().toISOString();
 
     if (order.filledQuantity >= order.quantity) {
@@ -230,6 +260,17 @@ export class PortfolioManager {
 
     // Update position
     this.updatePosition(order.symbol, order.side, qty, fillPrice);
+
+    // Update unrealized P&L for the position after the fill
+    const updatedPosition = this.state.positions[order.symbol];
+    if (updatedPosition) {
+      updatedPosition.unrealizedPnL =
+        (fillPrice - updatedPosition.averageCost) * updatedPosition.quantity;
+      updatedPosition.unrealizedPnLPercent =
+        updatedPosition.averageCost > 0
+          ? (fillPrice - updatedPosition.averageCost) / updatedPosition.averageCost
+          : 0;
+    }
 
     this.recalculateEquity();
     this.saveState();
@@ -352,52 +393,6 @@ export class PortfolioManager {
   getTrades(limit?: number): Trade[] {
     const trades = [...this.state.trades].reverse();
     return limit ? trades.slice(0, limit) : trades;
-  }
-
-  /**
-   * Take daily snapshot and reset daily P&L
-   */
-  takeDailySnapshot(): void {
-    const today = new Date().toISOString().split("T")[0]!;
-
-    // Check if we already have a snapshot for today
-    const existingIndex = this.snapshots.findIndex((s) => s.date === today);
-    const snapshot: DailySnapshot = {
-      date: today,
-      equity: this.state.equity,
-      cash: this.state.cash,
-      positions: Object.fromEntries(
-        Object.entries(this.state.positions).map(([sym, pos]) => [
-          sym,
-          { quantity: pos.quantity, averageCost: pos.averageCost },
-        ])
-      ),
-      dailyPnL: this.state.dailyPnL,
-    };
-
-    if (existingIndex >= 0) {
-      this.snapshots[existingIndex] = snapshot;
-    } else {
-      this.snapshots.push(snapshot);
-    }
-
-    this.saveSnapshots();
-  }
-
-  /**
-   * Reset daily P&L (call at market open)
-   */
-  resetDailyPnL(): void {
-    this.state.dailyPnL = 0;
-    this.saveState();
-  }
-
-  /**
-   * Reset weekly P&L (call at week start)
-   */
-  resetWeeklyPnL(): void {
-    this.state.weeklyPnL = 0;
-    this.saveState();
   }
 
   /**

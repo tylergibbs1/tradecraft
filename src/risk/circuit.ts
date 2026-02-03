@@ -48,6 +48,14 @@ export class CircuitBreaker {
         const data = fs.readFileSync(CIRCUIT_BREAKER_FILE, "utf-8");
         const persisted: PersistedState = JSON.parse(data);
 
+        // Validate state is a valid CircuitBreakerState
+        if (!["open", "closed", "half_open"].includes(persisted.state)) {
+          console.error("Circuit breaker state file corrupted (invalid state), resetting to closed");
+          this.state = "closed";
+          this.saveState();
+          return;
+        }
+
         this.state = persisted.state;
         this.reason = persisted.reason;
         this.triggeredAt = persisted.triggeredAt
@@ -65,7 +73,9 @@ export class CircuitBreaker {
           }
         }
       }
-    } catch {
+    } catch (error) {
+      // Log the error instead of silent reset
+      console.error("Error loading circuit breaker state:", error);
       // Start with closed state if file doesn't exist or is invalid
       this.state = "closed";
     }
@@ -82,7 +92,10 @@ export class CircuitBreaker {
       halfOpenTestsRemaining: this.halfOpenTestsRemaining,
     };
 
-    fs.writeFileSync(CIRCUIT_BREAKER_FILE, JSON.stringify(persisted, null, 2));
+    // Atomic write: write to temp file, then rename
+    const tempFile = CIRCUIT_BREAKER_FILE + ".tmp";
+    fs.writeFileSync(tempFile, JSON.stringify(persisted, null, 2));
+    fs.renameSync(tempFile, CIRCUIT_BREAKER_FILE);
   }
 
   private transitionToHalfOpen(): void {
@@ -95,6 +108,12 @@ export class CircuitBreaker {
    * Trip the circuit breaker - called when risk limit is exceeded
    */
   trip(reason: string): void {
+    // Prevent re-trip from resetting cooldown if already in open state
+    if (this.state === "open") {
+      // Already tripped, don't reset cooldown
+      return;
+    }
+
     this.state = "open";
     this.reason = reason;
     this.triggeredAt = new Date();

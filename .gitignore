@@ -43,3 +43,15 @@ config.toml
 
 # Breadcrumbs (local agent notes)
 .breadcrumbs.json
+
+# Test/scratch files
+fetch_*.ts
+scripts/test-*.ts
+
+# UI build artifacts (Next.js)
+ui/.next/
+ui/node_modules/
+ui/.vercel/
+
+# Swarm state (runtime data)
+swarm_state.json
