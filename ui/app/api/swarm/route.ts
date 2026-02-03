@@ -1,67 +1,5 @@
 import { NextRequest } from "next/server";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
-
-const DATA_DIR = join(process.cwd(), "..", "data");
-
-interface SpecialistState {
-  agentId: string;
-  role: string;
-  status: "idle" | "analyzing" | "publishing" | "done" | "error";
-  currentSymbol?: string;
-  signalsPublished: number;
-  lastMessage?: string;
-  streamingText?: string;
-  lastActivity: string;
-  error?: string;
-}
-
-interface ActiveTool {
-  agentId: string;
-  toolName: string;
-  startedAt: string;
-}
-
-interface ConsensusResult {
-  symbol: string;
-  weightedScore: number;
-  signalCount: number;
-  averageConfidence: number;
-  recommendation: string;
-  positionSizeMultiplier: number;
-  dissent?: string[];
-}
-
-interface SwarmState {
-  status: string;
-  cycleId?: string;
-  cycle: number;
-  lastUpdate: string;
-  specialists: string[] | Record<string, SpecialistState>;
-  symbols: string[];
-  activeTools?: Record<string, ActiveTool>;
-  consensusMap?: Record<string, ConsensusResult>;
-  latestCycle: {
-    timestamp: string;
-    cycle: number;
-    tokens: number;
-    cost: number;
-    signals: { agent: string; count: number }[];
-    consensus: { symbol: string; action: string; score: number }[];
-  };
-}
-
-function loadSwarmState(): SwarmState | null {
-  const stateFile = join(DATA_DIR, "swarm_state.json");
-  if (existsSync(stateFile)) {
-    try {
-      return JSON.parse(readFileSync(stateFile, "utf-8"));
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
+import { swarmDbReader } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const encoder = new TextEncoder();
@@ -70,78 +8,108 @@ export async function GET(request: NextRequest) {
   const stream = new ReadableStream({
     start(controller) {
       const sendUpdate = () => {
-        const state = loadSwarmState();
+        const snapshot = swarmDbReader.getSnapshot();
+        const { state, specialists, activeTools, consensus, latestCycle } = snapshot;
 
-        const currentUpdateTime = state?.lastUpdate || "";
-        const isRunning = state && Date.now() - new Date(state.lastUpdate).getTime() < 120000;
-
-        // Quick hash to detect changes (using lastUpdate + streaming text lengths)
-        const streamingLengths = state?.specialists
-          ? Object.values(state.specialists as Record<string, SpecialistState>)
-              .map(s => s.streamingText?.length || 0)
-              .join(',')
-          : '';
-        const dataHash = `${currentUpdateTime}-${streamingLengths}`;
+        // Quick hash to detect changes
+        const streamingLengths = specialists
+          .map(s => s.streaming_text?.length || 0)
+          .join(',');
+        const dataHash = `${state?.updated_at || ''}-${streamingLengths}-${activeTools.length}`;
 
         // Skip if no changes
         if (dataHash === lastDataHash) return;
         lastDataHash = dataHash;
 
-        // Build enhanced response with specialist states
-        const specialistStates: Record<string, SpecialistState> = {};
-        if (state?.specialists) {
-          if (typeof state.specialists === "object" && !Array.isArray(state.specialists)) {
-            // New format: already a record
-            Object.assign(specialistStates, state.specialists);
-          } else if (Array.isArray(state.specialists)) {
-            // Old format: array of role names - convert to basic states
-            for (const role of state.specialists) {
-              const agentId = `swarm-pm-${role.replace("-analyst", "")}`;
-              specialistStates[agentId] = {
-                agentId,
-                role,
-                status: isRunning ? "analyzing" : "idle",
-                signalsPublished: 0,
-                lastActivity: state.lastUpdate,
-              };
-            }
-          }
+        const isRunning = state?.status === "running" &&
+          state?.updated_at &&
+          Date.now() - new Date(state.updated_at).getTime() < 120000;
+
+        // Build specialist states map
+        const specialistStates: Record<string, {
+          agentId: string;
+          role: string;
+          status: string;
+          currentSymbol?: string;
+          signalsPublished: number;
+          lastMessage?: string;
+          streamingText?: string;
+          lastActivity: string;
+          error?: string;
+        }> = {};
+
+        for (const s of specialists) {
+          specialistStates[s.agent_id] = {
+            agentId: s.agent_id,
+            role: s.role,
+            status: s.status,
+            currentSymbol: s.current_symbol || undefined,
+            signalsPublished: s.signals_published,
+            lastMessage: s.last_message || undefined,
+            streamingText: s.streaming_text || undefined,
+            lastActivity: s.last_activity,
+            error: s.error || undefined,
+          };
         }
 
-        // Build consensus map from latestCycle.consensus
-        const consensusMap: Record<string, ConsensusResult> = {};
-        if (state?.consensusMap) {
-          Object.assign(consensusMap, state.consensusMap);
-        } else if (state?.latestCycle?.consensus) {
-          for (const c of state.latestCycle.consensus) {
-            consensusMap[c.symbol] = {
-              symbol: c.symbol,
-              weightedScore: c.score,
-              signalCount: 1,
-              averageConfidence: 0.7,
-              recommendation: c.action,
-              positionSizeMultiplier: Math.abs(c.score) / 2,
-            };
-          }
+        // Build active tools map
+        const activeToolsMap: Record<string, {
+          agentId: string;
+          toolName: string;
+          startedAt: string;
+        }> = {};
+
+        for (const t of activeTools) {
+          const key = `${t.agent_id}-${t.tool_name}`;
+          activeToolsMap[key] = {
+            agentId: t.agent_id,
+            toolName: t.tool_name,
+            startedAt: t.started_at,
+          };
         }
 
-        const cycleCount = state?.cycle || 0;
+        // Build consensus map
+        const consensusMap: Record<string, {
+          symbol: string;
+          weightedScore: number;
+          signalCount: number;
+          averageConfidence: number;
+          recommendation: string;
+          positionSizeMultiplier: number;
+          dissent?: string[];
+        }> = {};
+
+        for (const c of consensus) {
+          consensusMap[c.symbol] = {
+            symbol: c.symbol,
+            weightedScore: c.weighted_score,
+            signalCount: c.signal_count,
+            averageConfidence: c.average_confidence || 0.7,
+            recommendation: c.recommendation,
+            positionSizeMultiplier: c.position_size_multiplier || 1,
+            dissent: c.dissent ? JSON.parse(c.dissent) : undefined,
+          };
+        }
+
+        const cycleCount = state?.cycle_number || 0;
         const response = {
           isRunning,
           cycleCount,
-          cycleId: state?.cycleId || `cycle-${cycleCount}`,
+          cycleId: state?.cycle_id || `cycle-${cycleCount}`,
           swarmState: {
-            cycleId: state?.cycleId || `cycle-${cycleCount}`,
+            cycleId: state?.cycle_id || `cycle-${cycleCount}`,
             status: isRunning ? "running" : (state?.status || "idle"),
-            startedAt: state?.lastUpdate,
+            startedAt: state?.updated_at,
             specialists: specialistStates,
             consensusMap,
-            activeTools: state?.activeTools || {},
+            activeTools: activeToolsMap,
           },
-          lastCycleResult: state?.latestCycle
+          lastCycleResult: latestCycle
             ? {
-                ...state.latestCycle,
-                specialists: Array.isArray(state.specialists) ? state.specialists : Object.keys(state.specialists),
+                timestamp: latestCycle.completed_at,
+                cycle: latestCycle.cycle_number,
+                tokens: latestCycle.tokens_used,
+                cost: latestCycle.cost_usd,
               }
             : null,
         };

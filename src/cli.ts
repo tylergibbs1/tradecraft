@@ -17,14 +17,8 @@ import {
   type SpecialistUIState,
   type ConsensusResult,
 } from "./agents/index.js";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
-
-// Helper to write swarm state to file
-function writeSwarmState(dataDir: string, state: any) {
-  if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-  writeFileSync(join(dataDir, "swarm_state.json"), JSON.stringify(state, null, 2));
-}
+import { swarmDb } from "./db/index.js";
 
 const HELP = `
 Tradecraft CLI - Autonomous Trading System
@@ -629,8 +623,6 @@ async function startSwarm(
     process.exit(1);
   }
 
-  const dataDir = join(process.cwd(), "data");
-
   // Create price data fetcher
   const priceDataFetcher = async (symbol: string, days: number): Promise<PriceBar[]> => {
     const endDate = new Date();
@@ -647,204 +639,67 @@ async function startSwarm(
     }));
   };
 
-  // Track UI state for real-time updates
+  // Track cycle info
   let currentCycleId = "";
   let cycleCount = 0;
-  const specialistStates: Record<string, SpecialistUIState> = {};
-  const consensusMap: Record<string, ConsensusResult> = {};
-  const activeTools: Record<string, { agentId: string; toolName: string; startedAt: string }> = {};
 
-  // Throttle state writes during streaming (max every 100ms)
-  let lastStreamWrite = 0;
-  const STREAM_WRITE_INTERVAL = 100; // ms
-
-  const throttledWriteState = () => {
-    const now = Date.now();
-    if (now - lastStreamWrite >= STREAM_WRITE_INTERVAL) {
-      lastStreamWrite = now;
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId: currentCycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
-      });
-    }
-  };
-
-  // Create callbacks for real-time UI updates
+  // Create callbacks for real-time UI updates using SQLite
   const callbacks: SwarmCallbacks = {
     onCycleStart: (cycleId) => {
       currentCycleId = cycleId;
-      // Clear previous cycle state
-      Object.keys(activeTools).forEach(k => delete activeTools[k]);
-      Object.keys(consensusMap).forEach(k => delete consensusMap[k]);
-      // Reset specialist states
-      for (const agentId of Object.keys(specialistStates)) {
-        specialistStates[agentId].status = "idle";
-        specialistStates[agentId].streamingText = "";
-        specialistStates[agentId].currentSymbol = undefined;
-      }
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
-      });
+      swarmDb.startCycle(cycleId, cycleCount);
     },
     onAgentStart: (agentId, role, symbol) => {
-      specialistStates[agentId] = {
+      swarmDb.upsertSpecialist({
         agentId,
         role,
         status: "analyzing",
         currentSymbol: symbol,
         signalsPublished: 0,
         streamingText: "",
-        lastActivity: new Date().toISOString(),
-      };
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId: currentCycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
       });
     },
     onToolStart: (agentId, toolName) => {
-      const toolKey = `${agentId}-${toolName}`;
-      activeTools[toolKey] = { agentId, toolName, startedAt: new Date().toISOString() };
-      if (specialistStates[agentId]) {
-        specialistStates[agentId].lastMessage = `Using ${toolName}...`;
-        specialistStates[agentId].lastActivity = new Date().toISOString();
-      }
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId: currentCycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
-      });
+      swarmDb.addActiveTool(agentId, toolName);
     },
-    onToolComplete: (agentId, toolName, durationMs) => {
-      const toolKey = `${agentId}-${toolName}`;
-      delete activeTools[toolKey];
-      if (specialistStates[agentId]) {
-        specialistStates[agentId].lastMessage = `${toolName} completed (${durationMs}ms)`;
-        specialistStates[agentId].lastActivity = new Date().toISOString();
-      }
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId: currentCycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
-      });
+    onToolComplete: (agentId, toolName) => {
+      swarmDb.removeActiveTool(agentId, toolName);
     },
     onTextDelta: (agentId, text) => {
-      if (specialistStates[agentId]) {
-        specialistStates[agentId].streamingText = (specialistStates[agentId].streamingText || "") + text;
-        specialistStates[agentId].lastActivity = new Date().toISOString();
-      }
-      // Throttled write for real-time UI streaming
-      throttledWriteState();
+      swarmDb.appendStreamingText(agentId, text);
     },
     onSignalPublished: (signal) => {
-      if (specialistStates[signal.agentId]) {
-        specialistStates[signal.agentId].signalsPublished++;
-        specialistStates[signal.agentId].status = "publishing";
-        specialistStates[signal.agentId].lastMessage = `Published ${signal.signal} for ${signal.symbol}`;
-        specialistStates[signal.agentId].lastActivity = new Date().toISOString();
-      }
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId: currentCycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
-      });
+      swarmDb.incrementSignals(signal.agentId);
     },
     onConsensusUpdate: (symbol, consensus) => {
-      consensusMap[symbol] = consensus;
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId: currentCycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
+      swarmDb.upsertConsensus({
+        symbol,
+        weightedScore: consensus.weightedScore,
+        signalCount: consensus.signalCount,
+        averageConfidence: consensus.averageConfidence,
+        recommendation: consensus.recommendation,
+        positionSizeMultiplier: consensus.positionSizeMultiplier,
+        dissent: consensus.dissent,
       });
     },
     onAgentComplete: (agentId, result) => {
-      if (specialistStates[agentId]) {
-        specialistStates[agentId].status = result.error ? "error" : "done";
-        specialistStates[agentId].lastMessage = result.error || `Completed analysis`;
-        specialistStates[agentId].error = result.error;
-        specialistStates[agentId].lastActivity = new Date().toISOString();
+      const specialist = swarmDb.getSpecialist(agentId) as any;
+      if (specialist) {
+        swarmDb.upsertSpecialist({
+          agentId,
+          role: specialist.role,
+          status: result.error ? "error" : "done",
+          currentSymbol: specialist.current_symbol,
+          signalsPublished: specialist.signals_published,
+          streamingText: specialist.streaming_text,
+          lastMessage: result.error || "Completed analysis",
+          error: result.error,
+        });
       }
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId: currentCycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
-      });
+      swarmDb.clearAgentTools(agentId);
     },
     onCycleComplete: (result) => {
-      // Mark all specialists as done
-      for (const agentId of Object.keys(specialistStates)) {
-        if (specialistStates[agentId].status === "analyzing") {
-          specialistStates[agentId].status = "done";
-        }
-      }
-      writeSwarmState(dataDir, {
-        status: "running",
-        cycleId: currentCycleId,
-        cycle: cycleCount,
-        lastUpdate: new Date().toISOString(),
-        specialists: specialistStates,
-        symbols: config.tradingUniverse.symbols,
-        activeTools,
-        consensusMap,
-        latestCycle: {
-          timestamp: new Date().toISOString(),
-          cycle: cycleCount,
-          tokens: result.totalTokensUsed,
-          cost: result.totalCostUsd,
-          signals: result.specialistResults.map(s => ({
-            agent: s.role,
-            count: s.signalsPublished,
-          })),
-          consensus: Object.entries(consensusMap).map(([symbol, c]) => ({
-            symbol,
-            action: c.recommendation,
-            score: c.weightedScore,
-          })),
-        },
-      });
+      swarmDb.completeCycle(result.totalTokensUsed, result.totalCostUsd);
     },
   };
 
@@ -874,6 +729,20 @@ async function startSwarm(
   process.on("SIGINT", () => {
     console.log("\n\nStopping swarm...");
     running = false;
+    swarmDb.updateState({
+      cycleId: currentCycleId,
+      cycleNumber: cycleCount,
+      status: "stopped",
+      pid: null,
+    });
+  });
+
+  // Write initial state so dashboard knows we're starting
+  swarmDb.updateState({
+    cycleId: "",
+    cycleNumber: 0,
+    status: "running",
+    pid: process.pid,
   });
 
   while (running) {
@@ -989,17 +858,11 @@ async function startSwarm(
 
       } catch (error) {
         console.log(`[CYCLE ${cycleCount}] ❌ Error: ${error}`);
-        // Write error state
-        writeSwarmState(dataDir, {
-          status: "error",
+        swarmDb.updateState({
           cycleId: currentCycleId,
-          cycle: cycleCount,
-          lastUpdate: new Date().toISOString(),
-          specialists: specialistStates,
-          symbols: config.tradingUniverse.symbols,
-          activeTools: {},
-          consensusMap,
-          error: String(error),
+          cycleNumber: cycleCount,
+          status: "error",
+          pid: process.pid,
         });
       }
     }
@@ -1012,6 +875,7 @@ async function startSwarm(
   }
 
   console.log("\n✅ Swarm stopped");
+  swarmDb.close();
   process.exit(0);
 }
 

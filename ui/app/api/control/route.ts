@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn, ChildProcess } from "child_process";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
+import { swarmDbReader } from "@/lib/db";
 
 const ROOT_DIR = join(process.cwd(), "..");
 const DATA_DIR = join(ROOT_DIR, "data");
@@ -68,22 +69,6 @@ function loadConfig() {
   return null;
 }
 
-function loadSwarmState() {
-  const file = join(DATA_DIR, "swarm_state.json");
-  if (existsSync(file)) {
-    try {
-      const state = JSON.parse(readFileSync(file, "utf-8"));
-      // Check if swarm is still active (updated within last 2 minutes)
-      const lastUpdate = new Date(state.lastUpdate).getTime();
-      const isActive = Date.now() - lastUpdate < 120000;
-      return { ...state, isActive };
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 function loadCircuitBreaker() {
   const file = join(DATA_DIR, "circuit_breaker.json");
   if (existsSync(file)) {
@@ -99,8 +84,11 @@ function loadCircuitBreaker() {
 export async function GET() {
   const portfolio = loadPortfolio();
   const config = loadConfig();
-  const swarmState = loadSwarmState();
   const circuitBreaker = loadCircuitBreaker();
+
+  // Get swarm state from SQLite
+  const dbState = swarmDbReader.getState();
+  const isRunning = swarmDbReader.isRunning() || (swarmProcess !== null && !swarmProcess.killed);
 
   return NextResponse.json({
     portfolio: portfolio ? {
@@ -114,8 +102,14 @@ export async function GET() {
     } : null,
     config,
     swarm: {
-      isRunning: swarmProcess !== null && !swarmProcess.killed,
-      state: swarmState,
+      isRunning,
+      state: dbState ? {
+        status: dbState.status,
+        cycle: dbState.cycle_number,
+        cycleId: dbState.cycle_id,
+        lastUpdate: dbState.updated_at,
+        pid: dbState.pid,
+      } : null,
       output: swarmOutput.slice(-50),
     },
     risk: {
@@ -160,13 +154,28 @@ export async function POST(request: NextRequest): Promise<Response> {
     }
 
     case "stop-swarm": {
-      if (!swarmProcess || swarmProcess.killed) {
-        return NextResponse.json({ success: false, error: "Swarm not running" });
+      // First try the in-memory process reference
+      if (swarmProcess && !swarmProcess.killed) {
+        swarmProcess.kill("SIGINT");
+        swarmOutput.push("Stopping swarm...");
+        return NextResponse.json({ success: true, message: "Swarm stopping" });
       }
 
-      swarmProcess.kill("SIGINT");
-      swarmOutput.push("Stopping swarm...");
-      return NextResponse.json({ success: true, message: "Swarm stopping" });
+      // Fallback: check SQLite for PID (handles server restarts)
+      const pid = swarmDbReader.getPid();
+      const isRunning = swarmDbReader.isRunning();
+      if (pid && isRunning) {
+        try {
+          process.kill(pid, "SIGINT");
+          swarmOutput.push("Stopping swarm via PID...");
+          return NextResponse.json({ success: true, message: "Swarm stopping" });
+        } catch {
+          // Process might already be dead
+          return NextResponse.json({ success: false, error: "Swarm process not found" });
+        }
+      }
+
+      return NextResponse.json({ success: false, error: "Swarm not running" });
     }
 
     case "reset-circuit-breaker": {

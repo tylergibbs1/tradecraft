@@ -90,9 +90,10 @@ const STATUS_CONFIG: Record<SpecialistStatus, { label: string; dot: string; anim
 interface SpecialistPanelProps {
   state?: SpecialistUIState;
   role: AgentRole;
+  onClick?: () => void;
 }
 
-export function SpecialistPanel({ state, role }: SpecialistPanelProps) {
+export function SpecialistPanel({ state, role, onClick }: SpecialistPanelProps) {
   const status = state?.status || "idle";
   const config = ROLE_CONFIG[role];
   const statusConfig = STATUS_CONFIG[status];
@@ -114,11 +115,15 @@ export function SpecialistPanel({ state, role }: SpecialistPanelProps) {
   const displayText = getDisplayText(state?.streamingText);
 
   return (
-    <Card className={cn(
-      "border overflow-hidden h-[180px] flex flex-col",
-      config.color,
-      status === "analyzing" && "ring-1 ring-blue-500/20"
-    )}>
+    <Card
+      className={cn(
+        "border overflow-hidden h-[180px] flex flex-col transition-all",
+        config.color,
+        status === "analyzing" && "ring-1 ring-blue-500/20",
+        onClick && "cursor-pointer hover:border-foreground/20 hover:shadow-md"
+      )}
+      onClick={onClick}
+    >
       {/* Header - fixed height */}
       <div className={cn(
         "px-4 py-2.5 border-b border-border/50 bg-gradient-to-r shrink-0",

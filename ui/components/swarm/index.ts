@@ -1,6 +1,8 @@
 export { SpecialistPanel } from "./SpecialistPanel";
 export type { SpecialistUIState, SpecialistStatus, AgentRole } from "./SpecialistPanel";
 
+export { SpecialistAgent } from "./SpecialistAgent";
+
 export { ConsensusPanel } from "./ConsensusPanel";
 export type { ConsensusResult } from "./ConsensusPanel";
 

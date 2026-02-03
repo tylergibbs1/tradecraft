@@ -455,7 +455,7 @@ export default function ControlCenter() {
                     {state.portfolio.trades.slice().reverse().map((trade) => (
                       <tr key={trade.id} className="border-b">
                         <td className="py-2 text-muted-foreground">
-                          {new Date(trade.timestamp).toLocaleTimeString()}
+                          {new Date(trade.executedAt).toLocaleTimeString()}
                         </td>
                         <td className="py-2 font-mono">{trade.symbol}</td>
                         <td className="py-2">

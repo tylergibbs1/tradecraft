@@ -1,8 +1,9 @@
 "use client";
 
-import { SpecialistPanel, type SpecialistUIState, type AgentRole } from "./SpecialistPanel";
+import { type SpecialistUIState, type AgentRole } from "./SpecialistPanel";
+import { SpecialistAgent } from "./SpecialistAgent";
 import { ConsensusPanel, type ConsensusResult } from "./ConsensusPanel";
-import { ToolProgressIndicator, type ActiveTool } from "./ToolProgressIndicator";
+import { type ActiveTool } from "./ToolProgressIndicator";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -44,6 +45,13 @@ const STATUS_BADGE_CLASSES: Record<SwarmUIState["status"], string> = {
 };
 
 export function SwarmView({ state, cycleCount, tokensUsed, costUsd }: SwarmViewProps) {
+  // Get active tools for each agent
+  const getAgentTools = (agentId: string) => {
+    return Object.values(state.activeTools)
+      .filter(tool => tool.agentId === agentId)
+      .map(tool => ({ toolName: tool.toolName, startedAt: tool.startedAt }));
+  };
+
   return (
     <div className="space-y-4">
       {/* Header with status */}
@@ -74,21 +82,23 @@ export function SwarmView({ state, cycleCount, tokensUsed, costUsd }: SwarmViewP
         </CardHeader>
       </Card>
 
-      {/* Tool Progress Indicator */}
-      <ToolProgressIndicator activeTools={state.activeTools} />
-
-      {/* Specialist Panels - 2x2 Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Specialist Agents - Collapsible list */}
+      <div className="space-y-2">
         {SPECIALIST_ROLES.map((role) => {
           // Find the specialist state by role
           const specialistState = Object.values(state.specialists).find(
             (s) => s.role === role
           );
+          const agentTools = specialistState ? getAgentTools(specialistState.agentId) : [];
+          const isActive = specialistState?.status === "analyzing" || specialistState?.status === "publishing";
+
           return (
-            <SpecialistPanel
+            <SpecialistAgent
               key={role}
               role={role}
               state={specialistState}
+              activeTools={agentTools}
+              defaultOpen={isActive}
             />
           );
         })}
