@@ -1,8 +1,7 @@
 import { DataProvider } from "../config/schema.js";
 import { DataCache } from "./cache.js";
 import { YahooDataProvider } from "./providers/yahoo.js";
-import { PolygonDataProvider } from "./providers/polygon.js";
-import { AlphaVantageDataProvider } from "./providers/alphavantage.js";
+import { PolygonQuotesProvider } from "./providers/polygon/index.js";
 import { DataProviderInterface, OHLCV, Quote, TimeFrame } from "./types.js";
 
 export * from "./types.js";
@@ -21,11 +20,7 @@ export class DataManager {
     switch (providerType) {
       case "polygon":
         if (!apiKey) throw new Error("Polygon requires an API key");
-        this.provider = new PolygonDataProvider(apiKey);
-        break;
-      case "alphavantage":
-        if (!apiKey) throw new Error("Alpha Vantage requires an API key");
-        this.provider = new AlphaVantageDataProvider(apiKey);
+        this.provider = new PolygonQuotesProvider(apiKey);
         break;
       case "yahoo":
       default:

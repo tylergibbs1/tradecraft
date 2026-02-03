@@ -6,6 +6,13 @@ import { OrderSideSchema, OrderTypeSchema } from "../risk/types.js";
 import { getEdgarProvider } from "../data/providers/edgar.js";
 import { getNewsProvider } from "../data/providers/news.js";
 import { getExaProvider, ExaCategory } from "../data/providers/exa.js";
+import {
+  getPolygonNewsProvider,
+  getPolygonIndicatorsProvider,
+  getPolygonTickersProvider,
+  type IndicatorTimespan,
+  type TickerType,
+} from "../data/providers/polygon/index.js";
 
 // Tool input schemas
 const PlaceOrderSchema = z.object({
@@ -58,11 +65,6 @@ const GetRecentFilingsSchema = z.object({
   limit: z.number().int().min(1).max(50).optional().describe("Max filings to return (default: 10)"),
 });
 
-const GetAgentSignalsSchema = z.object({
-  symbol: z.string().min(1).max(10).optional().describe("Filter by stock symbol"),
-  maxAge: z.number().int().min(1).optional().describe("Max signal age in hours (default: 24)"),
-});
-
 // Exa AI search schemas
 const ExaSearchSchema = z.object({
   query: z.string().min(1).describe("Search query"),
@@ -78,6 +80,43 @@ const ExaFinancialSearchSchema = z.object({
   numResults: z.number().int().min(1).max(20).optional().describe("Number of results (default: 10)"),
 });
 
+// Polygon.io data schemas (ratios require separate Financials add-on - use SEC EDGAR instead)
+const GetPolygonNewsSchema = z.object({
+  symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
+  limit: z.number().int().min(1).max(50).optional().describe("Max articles (default: 20)"),
+  daysBack: z.number().int().min(1).max(30).optional().describe("Days of news history (default: 7)"),
+});
+
+const GetTechnicalIndicatorsSchema = z.object({
+  symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
+  indicators: z.array(z.enum(["sma", "ema", "rsi", "macd", "all"])).optional()
+    .describe("Indicators to fetch (default: all)"),
+  timespan: z.enum(["minute", "hour", "day", "week"]).optional()
+    .describe("Time period for each bar (default: day)"),
+  limit: z.number().int().min(1).max(200).optional().describe("Number of data points (default: 50)"),
+});
+
+const GetSMASchema = z.object({
+  symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
+  window: z.number().int().min(1).max(500).optional().describe("SMA window period (default: 50)"),
+  timespan: z.enum(["minute", "hour", "day", "week"]).optional().describe("Time period (default: day)"),
+  limit: z.number().int().min(1).max(500).optional().describe("Number of values (default: 100)"),
+});
+
+const GetCompanyInfoSchema = z.object({
+  symbols: z.array(z.string()).min(1).max(10).describe("List of stock symbols"),
+});
+
+const SearchTickersSchema = z.object({
+  query: z.string().min(1).optional().describe("Search term for company name or ticker"),
+  ticker: z.string().optional().describe("Exact ticker to search for"),
+  type: z.enum(["CS", "ETF", "ETN", "FUND", "PFD", "ADRC"]).optional()
+    .describe("Ticker type: CS=Common Stock, ETF, etc."),
+  exchange: z.string().optional().describe("Primary exchange MIC code (e.g., XNAS, XNYS)"),
+  activeOnly: z.boolean().optional().describe("Only return actively traded tickers (default: true)"),
+  limit: z.number().int().min(1).max(100).optional().describe("Max results (default: 20)"),
+});
+
 // Types
 type PlaceOrderInput = z.infer<typeof PlaceOrderSchema>;
 type CancelOrderInput = z.infer<typeof CancelOrderSchema>;
@@ -87,15 +126,20 @@ type GetFilingInput = z.infer<typeof GetFilingSchema>;
 type GetFinancialsInput = z.infer<typeof GetFinancialsSchema>;
 type GetNewsInput = z.infer<typeof GetNewsSchema>;
 type GetRecentFilingsInput = z.infer<typeof GetRecentFilingsSchema>;
-type GetAgentSignalsInput = z.infer<typeof GetAgentSignalsSchema>;
 type ExaSearchInput = z.infer<typeof ExaSearchSchema>;
 type ExaFinancialSearchInput = z.infer<typeof ExaFinancialSearchSchema>;
+type GetPolygonNewsInput = z.infer<typeof GetPolygonNewsSchema>;
+type GetTechnicalIndicatorsInput = z.infer<typeof GetTechnicalIndicatorsSchema>;
+type GetSMAInput = z.infer<typeof GetSMASchema>;
+type GetCompanyInfoInput = z.infer<typeof GetCompanyInfoSchema>;
+type SearchTickersInput = z.infer<typeof SearchTickersSchema>;
 
 export interface TradingMCPServerDeps {
   portfolioManager: PortfolioManager;
   riskMonitor: RiskMonitor;
   dataManager: DataManager;
   tradingUniverse: string[];
+  polygonApiKey?: string;
 }
 
 function createPortfolioSnapshot(
@@ -124,19 +168,45 @@ function createPortfolioSnapshot(
   };
 }
 
+// Validate and sanitize symbol format to prevent prompt injection
+const SYMBOL_REGEX = /^[A-Z]{1,10}$/;
+
+function sanitizeSymbol(symbol: string): string | null {
+  const upper = symbol.toUpperCase().trim();
+  return SYMBOL_REGEX.test(upper) ? upper : null;
+}
+
+function sanitizeTradingUniverse(symbols: string[]): string[] {
+  return symbols
+    .map(s => sanitizeSymbol(s))
+    .filter((s): s is string => s !== null);
+}
+
 export function createTradingTools(deps: TradingMCPServerDeps) {
-  const { portfolioManager, riskMonitor, dataManager, tradingUniverse } = deps;
+  const { portfolioManager, riskMonitor, dataManager, tradingUniverse, polygonApiKey } = deps;
+
+  // Sanitize trading universe to prevent prompt injection via symbol names
+  const sanitizedUniverse = sanitizeTradingUniverse(tradingUniverse);
 
   return {
     place_order: {
-      description: `Place a trading order. Only symbols in the trading universe are allowed: ${tradingUniverse.join(", ")}. Orders are validated against risk limits before execution.`,
+      description: `Place a trading order. Only symbols in the trading universe are allowed: ${sanitizedUniverse.join(", ")}. Orders are validated against risk limits before execution.`,
       inputSchema: PlaceOrderSchema,
       handler: async (input: PlaceOrderInput) => {
-        // Validate symbol is in trading universe
-        if (!tradingUniverse.includes(input.symbol.toUpperCase())) {
+        // Validate symbol format first (prevent injection)
+        const sanitizedSymbol = sanitizeSymbol(input.symbol);
+        if (!sanitizedSymbol) {
           return {
             success: false,
-            error: `Symbol ${input.symbol} is not in the trading universe. Allowed: ${tradingUniverse.join(", ")}`,
+            error: `Invalid symbol format: ${input.symbol}. Symbols must be 1-10 uppercase letters.`,
+          };
+        }
+
+        // Validate symbol is in trading universe
+        if (!sanitizedUniverse.includes(sanitizedSymbol)) {
+          return {
+            success: false,
+            error: `Symbol ${sanitizedSymbol} is not in the trading universe. Allowed: ${sanitizedUniverse.join(", ")}`,
           };
         }
 
@@ -194,7 +264,10 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
 
         // For paper trading with market orders, fill immediately
         if (input.type === "market") {
-          const fillPrice = input.side === "buy" ? quote.ask : quote.bid;
+          // Use ask for buys, bid for sells, fallback to last price if not available
+          const fillPrice = input.side === "buy"
+            ? (quote.ask ?? quote.last)
+            : (quote.bid ?? quote.last);
           const result = portfolioManager.fillOrder(order.id, fillPrice);
           if (result) {
             riskMonitor.recordTradeSuccess();
@@ -616,6 +689,324 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
         }
       },
     },
+
+    // Polygon.io data tools (ratios require separate Financials add-on - use SEC EDGAR get_financials instead)
+    get_polygon_news: {
+      description: "Get news with AI-powered sentiment analysis per ticker. Includes sentiment reasoning. Requires Polygon API key.",
+      inputSchema: GetPolygonNewsSchema,
+      handler: async (input: GetPolygonNewsInput) => {
+        if (!polygonApiKey) {
+          return {
+            success: false,
+            error: "Polygon API key not configured. Set dataProviderApiKey in config.",
+          };
+        }
+
+        try {
+          const newsProvider = getPolygonNewsProvider(polygonApiKey);
+          const daysBack = input.daysBack || 7;
+          const publishedAfter = new Date();
+          publishedAfter.setDate(publishedAfter.getDate() - daysBack);
+
+          const [articles, sentimentSummary] = await Promise.all([
+            newsProvider.getNews(input.symbol, {
+              limit: input.limit || 20,
+              publishedAfter,
+            }),
+            newsProvider.getSentimentSummary(input.symbol, {
+              limit: 50,
+              daysBack,
+            }),
+          ]);
+
+          return {
+            success: true,
+            symbol: input.symbol,
+            sentiment: {
+              score: sentimentSummary.averageSentimentScore,
+              breakdown: sentimentSummary.sentimentBreakdown,
+              articleCount: sentimentSummary.articleCount,
+            },
+            articles: articles.slice(0, 10).map(a => ({
+              title: a.title,
+              source: a.publisher.name,
+              publishedAt: a.publishedUtc,
+              url: a.articleUrl,
+              sentiment: a.insights.find(i => i.ticker.toUpperCase() === input.symbol.toUpperCase())?.sentiment,
+              sentimentReasoning: a.insights.find(i => i.ticker.toUpperCase() === input.symbol.toUpperCase())?.sentimentReasoning,
+            })),
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch Polygon news: ${error}`,
+          };
+        }
+      },
+    },
+
+    get_technical_indicators: {
+      description: "Get pre-calculated technical indicators (SMA, EMA, RSI, MACD) for a stock. Requires Polygon API key.",
+      inputSchema: GetTechnicalIndicatorsSchema,
+      handler: async (input: GetTechnicalIndicatorsInput) => {
+        if (!polygonApiKey) {
+          return {
+            success: false,
+            error: "Polygon API key not configured. Set dataProviderApiKey in config.",
+          };
+        }
+
+        try {
+          const indicatorsProvider = getPolygonIndicatorsProvider(polygonApiKey);
+          const timespan = (input.timespan || "day") as IndicatorTimespan;
+          const limit = input.limit || 50;
+          const indicators = input.indicators || ["all"];
+          const fetchAll = indicators.includes("all");
+
+          const result: Record<string, unknown> = {
+            symbol: input.symbol.toUpperCase(),
+            timespan,
+          };
+
+          const promises: Promise<void>[] = [];
+
+          if (fetchAll || indicators.includes("sma")) {
+            promises.push(
+              Promise.all([
+                indicatorsProvider.getSMA(input.symbol, { window: 20, timespan, limit }),
+                indicatorsProvider.getSMA(input.symbol, { window: 50, timespan, limit }),
+                indicatorsProvider.getSMA(input.symbol, { window: 200, timespan, limit }),
+              ]).then(([sma20, sma50, sma200]) => {
+                result.sma = {
+                  sma20: sma20.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  sma50: sma50.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  sma200: sma200.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  current: {
+                    sma20: sma20.values[0]?.value,
+                    sma50: sma50.values[0]?.value,
+                    sma200: sma200.values[0]?.value,
+                  },
+                };
+              })
+            );
+          }
+
+          if (fetchAll || indicators.includes("ema")) {
+            promises.push(
+              Promise.all([
+                indicatorsProvider.getEMA(input.symbol, { window: 12, timespan, limit }),
+                indicatorsProvider.getEMA(input.symbol, { window: 26, timespan, limit }),
+              ]).then(([ema12, ema26]) => {
+                result.ema = {
+                  ema12: ema12.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  ema26: ema26.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  current: {
+                    ema12: ema12.values[0]?.value,
+                    ema26: ema26.values[0]?.value,
+                  },
+                };
+              })
+            );
+          }
+
+          if (fetchAll || indicators.includes("rsi")) {
+            promises.push(
+              indicatorsProvider.getRSI(input.symbol, { window: 14, timespan, limit }).then(rsi => {
+                const currentRsi = rsi.values[0]?.value;
+                result.rsi = {
+                  current: currentRsi,
+                  recent: rsi.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0]!, value: v.value })),
+                  signal: currentRsi !== undefined ? (currentRsi < 30 ? "oversold" : currentRsi > 70 ? "overbought" : "neutral") : "unknown",
+                };
+              })
+            );
+          }
+
+          if (fetchAll || indicators.includes("macd")) {
+            promises.push(
+              indicatorsProvider.getMACD(input.symbol, { timespan, limit }).then(macd => {
+                const current = macd.values[0];
+                result.macd = {
+                  current: current ? {
+                    macd: current.value,
+                    signal: current.signal,
+                    histogram: current.histogram,
+                  } : null,
+                  recent: macd.values.slice(0, 5).map(v => ({
+                    date: new Date(v.timestamp).toISOString().split("T")[0],
+                    macd: v.value,
+                    signal: v.signal,
+                    histogram: v.histogram,
+                  })),
+                  trend: current ? (current.histogram > 0 ? "bullish" : "bearish") : "unknown",
+                };
+              })
+            );
+          }
+
+          await Promise.all(promises);
+
+          return {
+            success: true,
+            ...result,
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch technical indicators: ${error}`,
+          };
+        }
+      },
+    },
+
+    get_sma: {
+      description: "Get Simple Moving Average for a stock with configurable window. Requires Polygon API key.",
+      inputSchema: GetSMASchema,
+      handler: async (input: GetSMAInput) => {
+        if (!polygonApiKey) {
+          return {
+            success: false,
+            error: "Polygon API key not configured. Set dataProviderApiKey in config.",
+          };
+        }
+
+        try {
+          const indicatorsProvider = getPolygonIndicatorsProvider(polygonApiKey);
+          const sma = await indicatorsProvider.getSMA(input.symbol, {
+            window: input.window || 50,
+            timespan: (input.timespan || "day") as IndicatorTimespan,
+            limit: input.limit || 100,
+          });
+
+          return {
+            success: true,
+            symbol: sma.ticker,
+            window: sma.window,
+            timespan: sma.timespan,
+            current: sma.values[0]?.value,
+            values: sma.values.map(v => ({
+              date: new Date(v.timestamp).toISOString().split("T")[0],
+              value: v.value,
+            })),
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch SMA: ${error}`,
+          };
+        }
+      },
+    },
+
+    get_company_info: {
+      description: "Get detailed company information including description, industry (SIC code), market cap, employee count, and more. Requires Polygon API key.",
+      inputSchema: GetCompanyInfoSchema,
+      handler: async (input: GetCompanyInfoInput) => {
+        if (!polygonApiKey) {
+          return {
+            success: false,
+            error: "Polygon API key not configured. Set dataProviderApiKey in config.",
+          };
+        }
+
+        try {
+          const tickersProvider = getPolygonTickersProvider(polygonApiKey);
+          const details = await tickersProvider.getTickerDetailsBatch(input.symbols);
+
+          const results: Record<string, unknown> = {};
+          for (const symbol of input.symbols) {
+            const d = details.get(symbol.toUpperCase());
+            if (d) {
+              results[symbol] = {
+                name: d.name,
+                description: d.description,
+                // Classification
+                type: d.type,
+                sicCode: d.sicCode,
+                sicDescription: d.sicDescription,
+                primaryExchange: d.primaryExchange,
+                // Financials
+                marketCap: d.marketCap,
+                sharesOutstanding: d.weightedSharesOutstanding,
+                totalEmployees: d.totalEmployees,
+                // Company info
+                homepageUrl: d.homepageUrl,
+                phoneNumber: d.phoneNumber,
+                address: d.address ? `${d.address.address1 || ""}, ${d.address.city || ""}, ${d.address.state || ""} ${d.address.postalCode || ""}`.trim() : undefined,
+                // Dates
+                listDate: d.listDate,
+                active: d.active,
+                // Identifiers
+                cik: d.cik,
+                compositeFigi: d.compositeFigi,
+              };
+            } else {
+              results[symbol] = { error: "Company info not available" };
+            }
+          }
+
+          return {
+            success: true,
+            data: results,
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Failed to fetch company info: ${error}`,
+          };
+        }
+      },
+    },
+
+    search_tickers: {
+      description: "Search for stock tickers by company name, or filter by type/exchange. Useful for discovering new stocks to add to the trading universe. Requires Polygon API key.",
+      inputSchema: SearchTickersSchema,
+      handler: async (input: SearchTickersInput) => {
+        if (!polygonApiKey) {
+          return {
+            success: false,
+            error: "Polygon API key not configured. Set dataProviderApiKey in config.",
+          };
+        }
+
+        try {
+          const tickersProvider = getPolygonTickersProvider(polygonApiKey);
+          const results = await tickersProvider.searchTickers({
+            search: input.query,
+            ticker: input.ticker,
+            type: input.type as TickerType | undefined,
+            market: "stocks",
+            exchange: input.exchange,
+            active: input.activeOnly ?? true,
+            limit: input.limit || 20,
+            sort: "ticker",
+            order: "asc",
+          });
+
+          return {
+            success: true,
+            count: results.length,
+            tickers: results.map(t => ({
+              ticker: t.ticker,
+              name: t.name,
+              type: t.type,
+              exchange: t.primaryExchange,
+              active: t.active,
+            })),
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: `Ticker search failed: ${error}`,
+          };
+        }
+      },
+    },
   };
 }
 
@@ -630,7 +1021,12 @@ export {
   GetFinancialsSchema,
   GetNewsSchema,
   GetRecentFilingsSchema,
-  GetAgentSignalsSchema,
   ExaSearchSchema,
   ExaFinancialSearchSchema,
+  // Polygon tools
+  GetPolygonNewsSchema,
+  GetTechnicalIndicatorsSchema,
+  GetSMASchema,
+  GetCompanyInfoSchema,
+  SearchTickersSchema,
 };

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Data provider configuration
-export const DataProviderSchema = z.enum(["polygon", "alphavantage", "yahoo"]);
+export const DataProviderSchema = z.enum(["polygon", "yahoo"]);
 export type DataProvider = z.infer<typeof DataProviderSchema>;
 
 // Risk limits configuration

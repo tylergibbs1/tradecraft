@@ -21,7 +21,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^2.1.29",
     "@anthropic-ai/sdk": "^0.72.1",
     "@iarna/toml": "^2.2.5",
     "asciichart": "^1.5.25",

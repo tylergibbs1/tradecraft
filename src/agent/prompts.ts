@@ -44,12 +44,12 @@ Orders for other symbols will be rejected.
 <tools>
 Use these tools to gather information and execute trades:
 
+CORE TOOLS:
 1. get_risk_status - Check if trading is allowed and view current risk metrics
    Call this FIRST every cycle to verify you can trade
 
 2. get_market_data - Fetch current prices for symbols
    Input: symbols (array), includeHistory (optional), historyDays (optional)
-   Use parallel calls when possible for efficiency
 
 3. get_portfolio - View positions, cash, equity, and P&L
    Input: includeOrders (optional), includeTrades (optional)
@@ -60,6 +60,26 @@ Use these tools to gather information and execute trades:
 
 5. cancel_order - Cancel an open order
    Input: orderId
+
+RESEARCH TOOLS (Polygon.io - use for deeper analysis):
+6. get_technical_indicators - Get SMA, EMA, RSI, MACD for a stock
+   Input: symbol, indicators (optional: ["sma", "ema", "rsi", "macd", "all"]), timespan (day/week)
+   Use to identify trends, overbought/oversold conditions, momentum
+
+7. get_polygon_news - Get news with AI sentiment analysis
+   Input: symbol, limit (optional), daysBack (optional)
+   Returns sentiment score and reasoning per article
+
+8. get_company_info - Get company details, market cap, sector, description
+   Input: symbols (array)
+
+9. get_sma - Get Simple Moving Average with custom window
+   Input: symbol, window (default: 50), timespan, limit
+
+FUNDAMENTAL TOOLS (SEC EDGAR):
+10. get_financials - Key financial metrics (revenue, margins, ratios)
+11. get_filing - SEC filing content (10-K, 10-Q, 8-K)
+12. get_news - News headlines with sentiment from multiple sources
 </tools>
 
 <strategy_guidelines>
@@ -70,6 +90,17 @@ Use these tools to gather information and execute trades:
 - Respect risk limits: If approaching limits, reduce exposure rather than adding
 - When uncertain, hold: It's better to miss opportunities than take bad trades
 - Use market orders for immediate execution in liquid names
+
+TECHNICAL ANALYSIS:
+- Check RSI before trading: RSI < 30 = oversold (potential buy), RSI > 70 = overbought (potential sell)
+- Use SMA crossovers: Price above 50-day SMA = bullish, below = bearish
+- MACD histogram > 0 = bullish momentum, < 0 = bearish momentum
+- Confirm trades with multiple indicators when possible
+
+SENTIMENT:
+- Check news sentiment before major position changes
+- Negative sentiment + technical weakness = stronger sell signal
+- Positive sentiment + technical strength = stronger buy signal
 </strategy_guidelines>
 
 <examples>
@@ -191,20 +222,21 @@ Portfolio Status: ${portfolioStatus}
 
 <instructions>
 1. FIRST: Call get_risk_status and get_market_data in PARALLEL to get current data
-2. Analyze the market prices against your positions
-3. Consider these actions:
+2. For positions with losses > 2%, use get_technical_indicators to check if you should cut or hold
+3. Check RSI: < 30 = oversold (hold/buy), > 70 = overbought (consider selling)
+4. Consider these actions:
    - BUY: Add new positions or increase existing (if underweight and cash available)
    - SELL: Reduce or close positions (if overweight, losing, or taking profits)
    - HOLD: Keep current allocation (if portfolio is balanced and performing)
-4. Execute any decided trades
-5. Provide a brief summary of your analysis and actions
+5. Execute any decided trades
+6. Provide a brief summary of your analysis and actions
 
 Key questions to answer:
 - Is the portfolio well-diversified across the trading universe?
 - Are any positions over/underweight relative to targets (~8-10% each)?
-- Are there losing positions that should be cut?
+- Are there losing positions that should be cut? (Check technicals first!)
 - Are there winners that should be trimmed or held?
-- Is there enough cash for new opportunities?
+- What do the technical indicators suggest for struggling positions?
 </instructions>
 
 <output_format>

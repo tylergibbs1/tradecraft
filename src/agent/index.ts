@@ -137,6 +137,7 @@ export class TradingAgent {
       riskMonitor: deps.riskMonitor,
       dataManager: deps.dataManager,
       tradingUniverse: this.tradingUniverse,
+      polygonApiKey: deps.config.dataProviderApiKey,
     };
 
     this.tools = createTradingTools(toolDeps);
