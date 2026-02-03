@@ -29,7 +29,7 @@ function loadConfig() {
     try {
       const content = readFileSync(file, "utf-8");
       // Parse key config values
-      const parseValue = (key: string) => {
+      const parseValue = (key: string): string | string[] | null => {
         const match = content.match(new RegExp(`${key}\\s*=\\s*([\\d_]+|"[^"]*"|'[^']*'|\\[[^\\]]*\\])`));
         if (match) {
           let val = match[1];
@@ -42,14 +42,24 @@ function loadConfig() {
         return null;
       };
 
+      const parseString = (key: string, defaultVal: string): string => {
+        const val = parseValue(key);
+        return typeof val === "string" ? val : defaultVal;
+      };
+
+      const parseArray = (key: string, defaultVal: string[]): string[] => {
+        const val = parseValue(key);
+        return Array.isArray(val) ? val : defaultVal;
+      };
+
       return {
-        initialCapital: parseInt(parseValue("initialCapital") || "100000", 10),
-        symbols: parseValue("symbols") || ["AAPL", "GOOGL", "MSFT"],
-        model: parseValue("model") || "claude-sonnet-4-5-20250929",
-        maxPositionSize: parseFloat(parseValue("maxPositionSize") || "0.1"),
-        maxDailyLoss: parseFloat(parseValue("maxDailyLoss") || "0.02"),
-        maxDrawdown: parseFloat(parseValue("maxDrawdown") || "0.1"),
-        cycleIntervalMs: parseInt(parseValue("cycleIntervalMs") || "60000", 10),
+        initialCapital: parseInt(parseString("initialCapital", "100000"), 10),
+        symbols: parseArray("symbols", ["AAPL", "GOOGL", "MSFT"]),
+        model: parseString("model", "claude-sonnet-4-5-20250929"),
+        maxPositionSize: parseFloat(parseString("maxPositionSize", "0.1")),
+        maxDailyLoss: parseFloat(parseString("maxDailyLoss", "0.02")),
+        maxDrawdown: parseFloat(parseString("maxDrawdown", "0.1")),
+        cycleIntervalMs: parseInt(parseString("cycleIntervalMs", "60000"), 10),
       };
     } catch {
       return null;
@@ -114,9 +124,9 @@ export async function GET() {
   });
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<Response> {
   const body = await request.json();
-  const { action, params } = body;
+  const { action } = body;
 
   switch (action) {
     case "start-swarm": {
@@ -183,7 +193,7 @@ export async function POST(request: NextRequest) {
         output += data.toString();
       });
 
-      return new Promise((resolve) => {
+      return new Promise<Response>((resolve) => {
         cycleProcess.on("close", () => {
           resolve(NextResponse.json({ success: true, output }));
         });

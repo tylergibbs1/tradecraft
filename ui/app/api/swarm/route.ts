@@ -65,7 +65,6 @@ function loadSwarmState(): SwarmState | null {
 
 export async function GET(request: NextRequest) {
   const encoder = new TextEncoder();
-  let lastUpdateTime = "";
   let lastDataHash = "";
 
   const stream = new ReadableStream({
@@ -120,18 +119,19 @@ export async function GET(request: NextRequest) {
               weightedScore: c.score,
               signalCount: 1,
               averageConfidence: 0.7,
-              recommendation: c.action as any,
+              recommendation: c.action,
               positionSizeMultiplier: Math.abs(c.score) / 2,
             };
           }
         }
 
+        const cycleCount = state?.cycle || 0;
         const response = {
           isRunning,
-          cycleCount: currentCycle,
-          cycleId: state?.cycleId || `cycle-${currentCycle}`,
+          cycleCount,
+          cycleId: state?.cycleId || `cycle-${cycleCount}`,
           swarmState: {
-            cycleId: state?.cycleId || `cycle-${currentCycle}`,
+            cycleId: state?.cycleId || `cycle-${cycleCount}`,
             status: isRunning ? "running" : (state?.status || "idle"),
             startedAt: state?.lastUpdate,
             specialists: specialistStates,
@@ -149,8 +149,6 @@ export async function GET(request: NextRequest) {
         controller.enqueue(
           encoder.encode(`event: status\ndata: ${JSON.stringify(response)}\n\n`)
         );
-
-        lastUpdateTime = currentUpdateTime;
       };
 
       // Send initial data

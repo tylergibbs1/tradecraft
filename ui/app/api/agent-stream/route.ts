@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { readFileSync, existsSync, watchFile, unwatchFile } from "fs";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 
 const DATA_DIR = join(process.cwd(), "..", "data");
@@ -27,8 +27,8 @@ function getLatestAgentLog(): AgentCycle | null {
 
   try {
     // Find the most recent .jsonl file
-    const files = require("fs").readdirSync(agentLogDir);
-    const jsonlFiles = files.filter((f: string) => f.endsWith(".jsonl")).sort().reverse();
+    const files = readdirSync(agentLogDir);
+    const jsonlFiles = files.filter((f) => f.endsWith(".jsonl")).sort().reverse();
 
     if (jsonlFiles.length === 0) return null;
 
@@ -46,7 +46,15 @@ function getLatestAgentLog(): AgentCycle | null {
   }
 }
 
-function getSwarmState(): any {
+interface SwarmState {
+  status: string;
+  cycle: number;
+  lastUpdate: string;
+  specialists: string[];
+  latestCycle?: AgentCycle;
+}
+
+function getSwarmState(): SwarmState | null {
   const swarmFile = join(DATA_DIR, "swarm_state.json");
   if (existsSync(swarmFile)) {
     try {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -54,7 +55,17 @@ function ScoreBar({ score }: { score: number }) {
 }
 
 export function ConsensusPanel({ consensusMap }: ConsensusPanelProps) {
-  const symbols = Object.keys(consensusMap).sort();
+  // Memoize sorted symbols to avoid re-sorting on every render
+  const symbols = useMemo(
+    () => Object.keys(consensusMap).sort(),
+    [consensusMap]
+  );
+
+  // Memoize symbols with dissent to avoid double iteration
+  const symbolsWithDissent = useMemo(
+    () => symbols.filter((s) => consensusMap[s]?.dissent?.length),
+    [symbols, consensusMap]
+  );
 
   if (symbols.length === 0) {
     return (
@@ -143,20 +154,18 @@ export function ConsensusPanel({ consensusMap }: ConsensusPanelProps) {
           );
         })}
 
-        {/* Dissent warnings */}
-        {symbols.some((s) => consensusMap[s]?.dissent?.length) && (
+        {/* Dissent warnings - uses memoized symbolsWithDissent */}
+        {symbolsWithDissent.length > 0 && (
           <div className="mt-2 pt-2 border-t border-muted/30">
             <div className="text-xs text-yellow-500 font-medium mb-1">
               Dissenting Views
             </div>
-            {symbols
-              .filter((s) => consensusMap[s]?.dissent?.length)
-              .map((symbol) => (
-                <div key={`${symbol}-dissent`} className="text-xs text-muted-foreground">
-                  <span className="font-mono">{symbol}</span>:{" "}
-                  {consensusMap[symbol].dissent?.join(", ")}
-                </div>
-              ))}
+            {symbolsWithDissent.map((symbol) => (
+              <div key={`${symbol}-dissent`} className="text-xs text-muted-foreground">
+                <span className="font-mono">{symbol}</span>:{" "}
+                {consensusMap[symbol].dissent?.join(", ")}
+              </div>
+            ))}
           </div>
         )}
       </CardContent>

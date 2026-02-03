@@ -1,21 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell,
-  AreaChart,
-  Area,
-} from "recharts";
+import { useEffect, useState, useMemo } from "react";
+import dynamic from "next/dynamic";
 import {
   Card,
   CardContent,
@@ -26,6 +12,60 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+
+// Dynamic imports for heavy chart library (~500KB)
+const LineChart = dynamic(
+  () => import("recharts").then((mod) => mod.LineChart),
+  { ssr: false }
+);
+const Line = dynamic(
+  () => import("recharts").then((mod) => mod.Line),
+  { ssr: false }
+);
+const XAxis = dynamic(
+  () => import("recharts").then((mod) => mod.XAxis),
+  { ssr: false }
+);
+const YAxis = dynamic(
+  () => import("recharts").then((mod) => mod.YAxis),
+  { ssr: false }
+);
+const CartesianGrid = dynamic(
+  () => import("recharts").then((mod) => mod.CartesianGrid),
+  { ssr: false }
+);
+const Tooltip = dynamic(
+  () => import("recharts").then((mod) => mod.Tooltip),
+  { ssr: false }
+);
+const Legend = dynamic(
+  () => import("recharts").then((mod) => mod.Legend),
+  { ssr: false }
+);
+const ResponsiveContainer = dynamic(
+  () => import("recharts").then((mod) => mod.ResponsiveContainer),
+  { ssr: false }
+);
+const BarChart = dynamic(
+  () => import("recharts").then((mod) => mod.BarChart),
+  { ssr: false }
+);
+const Bar = dynamic(
+  () => import("recharts").then((mod) => mod.Bar),
+  { ssr: false }
+);
+const Cell = dynamic(
+  () => import("recharts").then((mod) => mod.Cell),
+  { ssr: false }
+);
+const AreaChart = dynamic(
+  () => import("recharts").then((mod) => mod.AreaChart),
+  { ssr: false }
+);
+const Area = dynamic(
+  () => import("recharts").then((mod) => mod.Area),
+  { ssr: false }
+);
 
 interface PerformanceData {
   metrics: {
@@ -64,6 +104,12 @@ interface PerformanceData {
   };
 }
 
+interface ConsensusItem {
+  symbol: string;
+  action: string;
+  score: number;
+}
+
 interface AgentActivity {
   timestamp: string;
   swarm: {
@@ -79,7 +125,7 @@ interface AgentActivity {
     tokens: number;
     cost: number;
     signals: { agent: string; count: number }[];
-    consensus: { symbol: string; action: string; score: number }[];
+    consensus: ConsensusItem[];
   } | null;
 }
 
@@ -178,7 +224,7 @@ export default function Dashboard() {
                   cycle: status.cycleCount,
                   lastUpdate: result.timestamp,
                   specialists: result.specialists || [],
-                  symbols: result.consensus?.map((c: any) => c.symbol) || [],
+                  symbols: result.consensus?.map((c: ConsensusItem) => c.symbol) || [],
                 }
               : null,
             latestCycle: result.consensus
@@ -195,8 +241,8 @@ export default function Dashboard() {
 
           // Add log entry for new cycles
           if (result.consensus && result.cycle) {
-            const logEntry = `[Cycle ${result.cycle}] ${result.consensus
-              .map((c: any) => `${c.symbol}: ${c.action} (${c.score?.toFixed(2) || "?"})`)
+            const logEntry = `[Cycle ${result.cycle}] ${(result.consensus as ConsensusItem[])
+              .map((c) => `${c.symbol}: ${c.action} (${c.score?.toFixed(2) || "?"})`)
               .join(", ")}`;
             setAgentLogs((prev) => {
               if (prev[prev.length - 1]?.startsWith(`[Cycle ${result.cycle}]`)) return prev;
@@ -217,6 +263,47 @@ export default function Dashboard() {
   }, []);
 
 
+  // Memoized chart data calculations - must be before early returns (React hooks rules)
+  const returnsChartData = useMemo(() => {
+    if (!data) return [];
+    return data.equityCurve.map((d, i) => ({
+      date: d.date.slice(5), // MM-DD format
+      tradecraft: d.return * 100,
+      spy: (data.benchmarks.spy.equityCurve[i]?.return || 0) * 100,
+      hedgeFund: (data.benchmarks.hedgeFund.equityCurve[i]?.return || 0) * 100,
+    }));
+  }, [data]);
+
+  // Memoized histogram with single-pass calculation
+  const histogramData = useMemo(() => {
+    if (!data) return [];
+    const bins = [-3, -2, -1, 0, 1, 2, 3];
+    const counts = new Array(bins.length - 1).fill(0);
+
+    // Single pass through data instead of filter() per bin
+    for (const r of data.dailyReturns) {
+      const pct = r * 100;
+      for (let i = 0; i < bins.length - 1; i++) {
+        if (pct >= bins[i] && pct < bins[i + 1]) {
+          counts[i]++;
+          break;
+        }
+      }
+    }
+
+    return counts.map((count, i) => ({
+      range: `${bins[i]}% to ${bins[i + 1]}%`,
+      count,
+      positive: bins[i] >= 0,
+    }));
+  }, [data]);
+
+  const vsMarket = useMemo(() => {
+    if (!data) return 0;
+    return data.metrics.totalReturn - data.benchmarks.spy.totalReturn;
+  }, [data]);
+
+  // Early returns for loading/error states
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -234,29 +321,6 @@ export default function Dashboard() {
   }
 
   if (!data) return null;
-
-  // Prepare chart data
-  const returnsChartData = data.equityCurve.map((d, i) => ({
-    date: d.date.slice(5), // MM-DD format
-    tradecraft: d.return * 100,
-    spy: (data.benchmarks.spy.equityCurve[i]?.return || 0) * 100,
-    hedgeFund: (data.benchmarks.hedgeFund.equityCurve[i]?.return || 0) * 100,
-  }));
-
-  // Daily returns histogram
-  const bins = [-3, -2, -1, 0, 1, 2, 3];
-  const histogramData = bins.slice(0, -1).map((bin, i) => {
-    const count = data.dailyReturns.filter(
-      (r) => r * 100 >= bin && r * 100 < bins[i + 1]
-    ).length;
-    return {
-      range: `${bin}% to ${bins[i + 1]}%`,
-      count,
-      positive: bin >= 0,
-    };
-  });
-
-  const vsMarket = data.metrics.totalReturn - data.benchmarks.spy.totalReturn;
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -351,7 +415,7 @@ export default function Dashboard() {
                         border: "1px solid #333",
                         borderRadius: "8px",
                       }}
-                      formatter={(value: number) => `${value.toFixed(2)}%`}
+                      formatter={(value) => typeof value === "number" ? `${value.toFixed(2)}%` : value}
                     />
                     <Legend />
                     <Line
@@ -536,7 +600,7 @@ export default function Dashboard() {
                         border: "1px solid #333",
                         borderRadius: "8px",
                       }}
-                      formatter={(value: number) => value.toFixed(2)}
+                      formatter={(value) => typeof value === "number" ? value.toFixed(2) : value}
                     />
                     <Area
                       type="monotone"

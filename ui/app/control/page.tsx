@@ -97,14 +97,25 @@ function formatPercent(value: number): string {
   return sign + (value * 100).toFixed(2) + "%";
 }
 
+// Consolidated swarm metrics to reduce re-renders
+interface SwarmMetrics {
+  cycleCount: number;
+  tokens: number;
+  cost: number;
+}
+
+const defaultSwarmMetrics: SwarmMetrics = {
+  cycleCount: 0,
+  tokens: 0,
+  cost: 0,
+};
+
 export default function ControlCenter() {
   const [state, setState] = useState<ControlState | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [swarmUIState, setSwarmUIState] = useState<SwarmUIState>(defaultSwarmUIState);
-  const [swarmCycleCount, setSwarmCycleCount] = useState(0);
-  const [swarmTokens, setSwarmTokens] = useState(0);
-  const [swarmCost, setSwarmCost] = useState(0);
+  const [swarmMetrics, setSwarmMetrics] = useState<SwarmMetrics>(defaultSwarmMetrics);
 
   const fetchState = useCallback(async () => {
     try {
@@ -134,10 +145,12 @@ export default function ControlCenter() {
       try {
         const data = JSON.parse(event.data);
 
-        // Update cycle metrics
-        if (data.cycleCount) setSwarmCycleCount(data.cycleCount);
-        if (data.lastCycleResult?.tokens) setSwarmTokens(data.lastCycleResult.tokens);
-        if (data.lastCycleResult?.cost) setSwarmCost(data.lastCycleResult.cost);
+        // Update cycle metrics atomically (single state update instead of 3)
+        setSwarmMetrics((prev) => ({
+          cycleCount: data.cycleCount ?? prev.cycleCount,
+          tokens: data.lastCycleResult?.tokens ?? prev.tokens,
+          cost: data.lastCycleResult?.cost ?? prev.cost,
+        }));
 
         // Update swarm UI state from SSE
         if (data.swarmState) {
@@ -471,9 +484,9 @@ export default function ControlCenter() {
         {/* Swarm View - Real-time agent visualization */}
         <SwarmView
           state={swarmUIState}
-          cycleCount={swarmCycleCount}
-          tokensUsed={swarmTokens}
-          costUsd={swarmCost}
+          cycleCount={swarmMetrics.cycleCount}
+          tokensUsed={swarmMetrics.tokens}
+          costUsd={swarmMetrics.cost}
         />
 
         {/* Configuration */}

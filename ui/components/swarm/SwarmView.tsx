@@ -3,7 +3,7 @@
 import { SpecialistPanel, type SpecialistUIState, type AgentRole } from "./SpecialistPanel";
 import { ConsensusPanel, type ConsensusResult } from "./ConsensusPanel";
 import { ToolProgressIndicator, type ActiveTool } from "./ToolProgressIndicator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export interface SwarmUIState {

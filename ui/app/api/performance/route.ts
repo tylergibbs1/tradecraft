@@ -26,6 +26,21 @@ interface PortfolioState {
   trades: Trade[];
 }
 
+interface EquityCurvePoint {
+  date: string;
+  equity: number;
+  return: number;
+}
+
+interface BenchmarkMetrics {
+  totalReturn: number;
+  annualizedReturn: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  volatility: number;
+  equityCurve: EquityCurvePoint[];
+}
+
 function loadSnapshots(): Snapshot[] {
   const snapshotsFile = join(DATA_DIR, "snapshots.json");
   if (existsSync(snapshotsFile)) {
@@ -100,7 +115,7 @@ function calculateMaxDrawdown(equities: number[]): number {
 function generateBenchmarkData(
   dates: string[],
   initialValue: number
-): { spy: any; hedgeFund: any } {
+): { spy: BenchmarkMetrics; hedgeFund: BenchmarkMetrics } {
   // Simulated S&P 500 data (realistic returns)
   const spyDailyReturn = 0.0004; // ~10% annual
   const spyVolatility = 0.01;
