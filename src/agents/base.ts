@@ -6,7 +6,8 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { query, Options, HookCallback, HookInput, HookJSONOutput } from '@anthropic-ai/claude-agent-sdk';
+import { query, Options, HookCallback, HookInput, HookJSONOutput, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
 import {
   AgentSignal,
   AgentRole,
@@ -105,8 +106,7 @@ export abstract class ResearchAgent {
    * Get the list of allowed tool names for the Agent SDK
    */
   protected getAllowedTools(): string[] {
-    // Include built-in tools plus custom tools
-    return ['WebSearch', 'WebFetch', ...Array.from(this.tools.keys())];
+    return Array.from(this.tools.keys());
   }
 
   /**
@@ -240,9 +240,48 @@ export abstract class ResearchAgent {
       return { continue: true };
     };
 
+    // Convert JSON-like schemas to Zod shapes and register specialist tools
+    const jsonSchemaToZodShape = (schema: any): Record<string, z.ZodTypeAny> => {
+      const props = schema?.properties || {};
+      const required: string[] = Array.isArray(schema?.required) ? schema.required : [];
+      const shape: Record<string, z.ZodTypeAny> = {};
+
+      const toZod = (def: any): z.ZodTypeAny => {
+        if (!def || typeof def !== 'object') return z.any();
+        const t = def.type;
+        if (t === 'string') return z.string();
+        if (t === 'number' || t === 'integer') return z.number();
+        if (t === 'boolean') return z.boolean();
+        if (t === 'array') {
+          const item = def.items ? toZod(def.items) : z.any();
+          return z.array(item);
+        }
+        if (t === 'object' && def.properties) {
+          return z.object(jsonSchemaToZodShape(def));
+        }
+        return z.any();
+      };
+
+      for (const [key, def] of Object.entries(props)) {
+        const base = toZod(def);
+        shape[key] = required.includes(key) ? base : base.optional();
+      }
+      return shape;
+    };
+
+    const sdkTools = Array.from(this.tools.entries()).map(([name, def]) =>
+      tool(name, def.description, jsonSchemaToZodShape(def.inputSchema), async (args) => {
+        const result = await def.handler(args as any);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      })
+    );
+
+    const mcp = createSdkMcpServer({ name: `specialist-${this.agentId}`, tools: sdkTools });
+
     // Configure Agent SDK options
     const options: Options = {
       systemPrompt,
+      mcpServers: { specialist: mcp },
       allowedTools: this.getAllowedTools(),
       maxTurns: 5,
       permissionMode: 'bypassPermissions',

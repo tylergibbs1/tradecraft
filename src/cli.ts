@@ -7,7 +7,7 @@ import { loadConfig, configExists } from "./config/index.js";
 import { PortfolioManager } from "./portfolio/manager.js";
 import { RiskMonitor } from "./risk/monitor.js";
 import { DataManager } from "./data/index.js";
-import { TradingAgent } from "./agent/index.js";
+import { SdkTradingAgent } from "./agent/sdk-trading-agent.js";
 import {
   createSwarm,
   getSharedSignalBus,
@@ -295,7 +295,7 @@ async function runCycle(
   console.log("║                 RUNNING TRADING CYCLE                      ║");
   console.log("╚════════════════════════════════════════════════════════════╝\n");
 
-  const agent = new TradingAgent(
+  const agent = new SdkTradingAgent(
     { config, portfolioManager, riskMonitor, dataManager },
     {
       onMessage: (msg) => {
@@ -349,7 +349,7 @@ async function startAgent(
   console.log("\nPress Ctrl+C to stop\n");
   console.log("─".repeat(60));
 
-  const agent = new TradingAgent(
+  const agent = new SdkTradingAgent(
     { config, portfolioManager, riskMonitor, dataManager },
     {
       onStateChange: (state) => {
@@ -498,13 +498,16 @@ async function runSwarmCycle(
     }));
   };
 
-  // Create swarm
+  // Create swarm (enable PM execution via SDK tools)
   const swarm = createSwarm({
     apiKey,
     tradingUniverse: config.tradingUniverse.symbols,
     model: config.agentParams.model,
     priceDataFetcher,
     exaApiKey: process.env.EXA_API_KEY,
+    portfolioManager,
+    riskMonitor,
+    dataManager,
   });
 
   console.log("🐝 Swarm initialized with specialists:");
@@ -567,29 +570,12 @@ async function runSwarmCycle(
     console.log(`   ${symbol}: ${consensus.recommendation} (score: ${consensus.weightedScore.toFixed(2)}, signals: ${consensus.signalCount})`);
   }
 
-  // Show trade decisions
+  // Show trade decisions (execution handled by PortfolioManager via SDK tools)
   if (result.tradeDecisions.length > 0) {
-    console.log("\n💰 Trade Decisions:");
+    console.log("\n💰 Trade Decisions (executed by PM):");
     for (const decision of result.tradeDecisions) {
       console.log(`   ${decision.symbol}: ${decision.action} ${decision.quantity || ""} (${(decision.confidence * 100).toFixed(0)}% confidence)`);
       console.log(`      ${decision.reason.slice(0, 100)}...`);
-
-      // Execute trade if actionable
-      if (decision.action !== "HOLD" && decision.quantity) {
-        const side = decision.action.toLowerCase() as "buy" | "sell";
-        try {
-          const quote = await dataManager.getQuote(decision.symbol);
-          const order = portfolioManager.createOrder(decision.symbol, side, "market", decision.quantity);
-          portfolioManager.submitOrder(order.id);
-          const fillPrice = side === "buy" ? (quote.ask ?? quote.last) : (quote.bid ?? quote.last);
-          const fillResult = portfolioManager.fillOrder(order.id, fillPrice);
-          if (fillResult) {
-            console.log(`      ✓ Executed: ${side.toUpperCase()} ${decision.quantity} @ ${formatCurrency(fillPrice)}`);
-          }
-        } catch (err) {
-          console.log(`      ✗ Failed to execute: ${err}`);
-        }
-      }
     }
   } else {
     console.log("\n💤 No trade decisions (insufficient consensus)");
@@ -711,6 +697,10 @@ async function startSwarm(
     priceDataFetcher,
     exaApiKey: process.env.EXA_API_KEY,
     callbacks,
+    // Provide execution dependencies so the PortfolioManager can trade via SDK tools
+    portfolioManager,
+    riskMonitor,
+    dataManager,
   });
 
   console.log("🐝 Swarm Specialists:");

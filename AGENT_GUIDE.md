@@ -143,7 +143,7 @@ bun run agent-backtest -y
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                      TradingAgent                           │
+│                 SdkTradingAgent (Agent SDK)                │
 │  - Builds prompts with portfolio state and risk status      │
 │  - Calls Claude API with trading tools                      │
 │  - Processes tool calls and executes trades                 │
@@ -306,7 +306,7 @@ bun run backtest momentum --start 2024-01-01
 tradecraft/
 ├── src/
 │   ├── agent/
-│   │   ├── index.ts        # TradingAgent class
+│   │   ├── sdk-trading-agent.ts # Agent SDK trading agent
 │   │   ├── mcp-server.ts   # Trading tools
 │   │   ├── prompts.ts      # System and cycle prompts
 │   │   ├── permissions.ts  # Risk validation for tools

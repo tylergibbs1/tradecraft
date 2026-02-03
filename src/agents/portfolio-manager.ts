@@ -8,7 +8,8 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import Anthropic from '@anthropic-ai/sdk';
+import { query, createSdkMcpServer, tool, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
 import {
   AgentSignal,
   AgentRole,
@@ -49,27 +50,41 @@ export interface PortfolioManagerDependencies {
   priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
   exaApiKey?: string;
   callbacks?: SwarmCallbacks;
+  // Optional execution deps for trading via SDK tools
+  portfolioManager?: import('../portfolio/manager.js').PortfolioManager;
+  riskMonitor?: import('../risk/monitor.js').RiskMonitor;
+  dataManager?: import('../data/index.js').DataManager;
 }
 
 // TradeDecision and SwarmCycleResult are imported from types.ts
 
 export class PortfolioManagerAgent {
-  private client: Anthropic;
   private config: PortfolioManagerConfig;
   private signalBus: SignalBus;
   private specialists: ResearchAgent[];
   private weights: AgentWeights;
   private callbacks?: SwarmCallbacks;
+  private execDeps?: {
+    portfolioManager: import('../portfolio/manager.js').PortfolioManager;
+    riskMonitor: import('../risk/monitor.js').RiskMonitor;
+    dataManager: import('../data/index.js').DataManager;
+  };
 
   constructor(
     config: PortfolioManagerConfig,
     deps: PortfolioManagerDependencies
   ) {
     this.config = config;
-    this.client = new Anthropic({ apiKey: deps.apiKey });
     this.signalBus = deps.signalBus || getSharedSignalBus();
     this.weights = { ...DEFAULT_AGENT_WEIGHTS, ...config.weights };
     this.callbacks = deps.callbacks;
+    if (deps.portfolioManager && deps.riskMonitor && deps.dataManager) {
+      this.execDeps = {
+        portfolioManager: deps.portfolioManager,
+        riskMonitor: deps.riskMonitor,
+        dataManager: deps.dataManager,
+      };
+    }
 
     // Update signal bus weights
     this.signalBus.setWeights(this.weights);
@@ -197,6 +212,19 @@ export class PortfolioManagerAgent {
         totalCostUsd: (totalTokensUsed / 1_000_000) * 9,
       };
 
+      // If execution deps provided, let Claude execute trades via SDK tools
+      if (this.execDeps && tradeDecisions.length > 0) {
+        try {
+          const execTokens = await this.executeDecisionsWithClaude(tradeDecisions);
+          totalTokensUsed += execTokens;
+          result.totalTokensUsed = totalTokensUsed;
+          result.totalCostUsd = (totalTokensUsed / 1_000_000) * 9;
+        } catch (e) {
+          // Non-fatal, include error in result
+          (result as any).executionError = String(e);
+        }
+      }
+
       // Emit cycle complete callback
       this.callbacks?.onCycleComplete?.(result);
 
@@ -219,6 +247,67 @@ export class PortfolioManagerAgent {
 
       return result;
     }
+  }
+
+  // Execute trade decisions by invoking trading MCP tools via Agent SDK
+  private async executeDecisionsWithClaude(tradeDecisions: TradeDecision[]): Promise<number> {
+    if (!this.execDeps) return 0;
+    const { portfolioManager, riskMonitor, dataManager } = this.execDeps;
+
+    const { createTradingTools } = await import('../agent/mcp-server.js');
+    const toolDefs = createTradingTools({
+      portfolioManager,
+      riskMonitor,
+      dataManager,
+      tradingUniverse: this.config.tradingUniverse,
+    } as any);
+
+    const toRawShape = (schema: unknown): Record<string, z.ZodTypeAny> => {
+      const zobj = schema as z.ZodObject<any>;
+      return (zobj as any).shape || (zobj as any)._def?.shape?.();
+    };
+
+    const sdkTools = Object.entries(toolDefs).map(([name, def]) =>
+      tool(name, def.description, toRawShape(def.inputSchema), async (args) => {
+        const res = await def.handler(args as any);
+        return { content: [{ type: 'text', text: JSON.stringify(res) }] };
+      })
+    );
+
+    const mcp = createSdkMcpServer({ name: 'pm-trading', tools: sdkTools });
+
+    const plan = tradeDecisions
+      .map(d => `${d.symbol}: ${d.action}${d.quantity ? ' ' + d.quantity : ''} (confidence ${(d.confidence * 100).toFixed(0)}%)`)
+      .join('\n');
+
+    const system = `You are the portfolio manager. Execute trades safely:
+- Validate risk using get_risk_status and current portfolio state.
+- Use get_market_data to confirm prices.
+- Place orders via place_order when justified.
+- Only act on the provided plan and symbols.
+- Keep output concise.`;
+
+    const user = `Trade plan for this cycle:\n${plan}\n\nUse tools to validate and execute.`;
+
+    let usedTokens = 0;
+    const options: Options = {
+      systemPrompt: system,
+      model: this.config.model,
+      maxTurns: 10,
+      mcpServers: { trading: mcp },
+      allowedTools: ['get_risk_status','get_portfolio','get_market_data','place_order','cancel_order'],
+      includePartialMessages: true,
+    };
+
+    for await (const msg of query({ prompt: user, options })) {
+      if ((msg as any).type === 'result' && (msg as any).subtype === 'success') {
+        const res: any = msg;
+        const u = res.usage;
+        if (u) usedTokens += (u.input_tokens || 0) + (u.output_tokens || 0);
+      }
+    }
+
+    return usedTokens;
   }
 
   /**
@@ -364,6 +453,10 @@ export function createSwarm(
     priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
     exaApiKey?: string;
     callbacks?: SwarmCallbacks;
+    // Optional execution deps for trading
+    portfolioManager?: import('../portfolio/manager.js').PortfolioManager;
+    riskMonitor?: import('../risk/monitor.js').RiskMonitor;
+    dataManager?: import('../data/index.js').DataManager;
   }
 ): PortfolioManagerAgent {
   return new PortfolioManagerAgent(
@@ -381,6 +474,9 @@ export function createSwarm(
       priceDataFetcher: config.priceDataFetcher,
       exaApiKey: config.exaApiKey,
       callbacks: config.callbacks,
+      portfolioManager: config.portfolioManager,
+      riskMonitor: config.riskMonitor,
+      dataManager: config.dataManager,
     }
   );
 }

@@ -5,7 +5,6 @@
  * insights about business quality, financial health, and growth.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import {
   ResearchAgent,
   ResearchAgentDependencies,

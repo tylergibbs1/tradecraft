@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
-import Anthropic from "@anthropic-ai/sdk";
+import { query, createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 import { DataManager, OHLCV, Quote } from "../data/index.js";
 import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
 import { RiskLimits } from "../config/schema.js";
@@ -191,14 +192,12 @@ class SimulatedPortfolio {
 }
 
 export class AgentBacktestEngine {
-  private client: Anthropic;
   private dataManager: DataManager;
   private config: AgentBacktestConfig;
   private historicalData: Map<string, OHLCV[]> = new Map();
   private pricesByDate: Map<string, Map<string, OHLCV>> = new Map();
 
   constructor(apiKey: string, dataManager: DataManager, config: AgentBacktestConfig) {
-    this.client = new Anthropic({ apiKey });
     this.dataManager = dataManager;
     this.config = config;
   }
@@ -313,48 +312,21 @@ export class AgentBacktestEngine {
     let tokens = 0;
     let reasoning = "";
 
-    // Build tools that return historical data
-    const tools: Anthropic.Tool[] = [
-      {
-        name: "get_risk_status",
-        description: "Check if trading is allowed and view current risk metrics",
-        input_schema: { type: "object", properties: {} },
-      },
-      {
-        name: "get_market_data",
-        description: "Get current prices for symbols",
-        input_schema: {
-          type: "object",
-          properties: {
-            symbols: { type: "array", items: { type: "string" }, description: "List of symbols" },
-          },
-          required: ["symbols"],
-        },
-      },
-      {
-        name: "get_portfolio",
-        description: "Get current portfolio state",
-        input_schema: { type: "object", properties: {} },
-      },
-      {
-        name: "place_order",
-        description: "Place a trading order",
-        input_schema: {
-          type: "object",
-          properties: {
-            symbol: { type: "string", description: "Stock symbol" },
-            side: { type: "string", enum: ["buy", "sell"], description: "Order side" },
-            type: { type: "string", enum: ["market"], description: "Order type" },
-            quantity: { type: "number", description: "Number of shares" },
-          },
-          required: ["symbol", "side", "type", "quantity"],
-        },
-      },
-    ];
+    // Backtest MCP tools implemented with the Agent SDK
+    const GetRiskStatusSchema = z.object({});
+    const GetMarketDataSchema = z.object({
+      symbols: z.array(z.string()).min(1),
+    });
+    const GetPortfolioSchema = z.object({});
+    const PlaceOrderSchema = z.object({
+      symbol: z.string().min(1).max(10),
+      side: z.enum(["buy", "sell"]),
+      type: z.enum(["market"]).default("market"),
+      quantity: z.number().int().positive(),
+    });
 
-    // Tool handlers
-    const handleTool = (name: string, input: Record<string, unknown>): unknown => {
-      if (name === "get_risk_status") {
+    const sdkTools = [
+      tool("get_risk_status", "Check if trading is allowed and view current risk metrics", GetRiskStatusSchema.shape, async () => {
         const snapshot: PortfolioSnapshot = {
           cash: portfolio.getState(currentPrices).cash,
           equity: portfolio.getEquity(currentPrices),
@@ -368,13 +340,11 @@ export class AgentBacktestEngine {
           peakEquity: portfolio.getState(currentPrices).peakEquity,
         };
         const status = riskMonitor.getStatus(snapshot);
-        return { success: true, status };
-      }
-
-      if (name === "get_market_data") {
-        const symbols = input.symbols as string[];
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, status }) }] };
+      }),
+      tool("get_market_data", "Get current prices for symbols", GetMarketDataSchema.shape, async (args) => {
         const data: Record<string, unknown> = {};
-        for (const symbol of symbols) {
+        for (const symbol of args.symbols) {
           const bar = prices.get(symbol);
           if (bar) {
             data[symbol] = {
@@ -389,12 +359,11 @@ export class AgentBacktestEngine {
             };
           }
         }
-        return { success: true, data, date };
-      }
-
-      if (name === "get_portfolio") {
+        return { content: [{ type: "text", text: JSON.stringify({ success: true, data, date }) }] };
+      }),
+      tool("get_portfolio", "Get current portfolio state", GetPortfolioSchema.shape, async () => {
         const state = portfolio.getState(currentPrices);
-        return {
+        const out = {
           success: true,
           portfolio: {
             cash: state.cash,
@@ -402,34 +371,30 @@ export class AgentBacktestEngine {
             positions: portfolio.getPositions(),
           },
         };
-      }
-
-      if (name === "place_order") {
-        const symbol = (input.symbol as string).toUpperCase();
-        const side = input.side as "buy" | "sell";
-        const quantity = input.quantity as number;
+        return { content: [{ type: "text", text: JSON.stringify(out) }] };
+      }),
+      tool("place_order", "Place a trading order", PlaceOrderSchema.shape, async (args) => {
+        const symbol = args.symbol.toUpperCase();
+        const side = args.side;
+        const quantity = args.quantity;
         const price = currentPrices.get(symbol);
 
         if (!price) {
-          return { success: false, error: `No price for ${symbol}` };
+          return { content: [{ type: "text", text: JSON.stringify({ success: false, error: `No price for ${symbol}` }) }] };
         }
-
         let trade: AgentBacktestTrade | null = null;
-        if (side === "buy") {
-          trade = portfolio.buy(symbol, quantity, price);
-        } else {
-          trade = portfolio.sell(symbol, quantity, price);
-        }
+        if (side === "buy") trade = portfolio.buy(symbol, quantity, price);
+        else trade = portfolio.sell(symbol, quantity, price);
 
         if (trade) {
           cycleTrades.push(trade);
-          return { success: true, trade };
+          return { content: [{ type: "text", text: JSON.stringify({ success: true, trade }) }] };
         }
-        return { success: false, error: "Order failed" };
-      }
+        return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "Order failed" }) }] };
+      }),
+    ];
 
-      return { error: "Unknown tool" };
-    };
+    const mcp = createSdkMcpServer({ name: "backtest", tools: sdkTools });
 
     const portfolioState = portfolio.getState(currentPrices);
 
@@ -449,57 +414,34 @@ export class AgentBacktestEngine {
     const riskStatus = riskMonitor.getStatus(snapshot);
     const cyclePrompt = buildCyclePrompt(portfolioState, riskStatus);
 
-    // Run conversation
-    const messages: Anthropic.MessageParam[] = [
-      { role: "user", content: cyclePrompt },
-    ];
+    // Run conversation via Agent SDK
+    const options: Options = {
+      systemPrompt: `You are an autonomous trading agent. Analyze market data and make trading decisions for symbols: ${this.config.symbols.join(", ")}. ${this.config.allowShorts ? "Short selling is allowed." : "Short selling is NOT allowed."}`,
+      model: this.config.model,
+      maxTurns: this.config.maxTurnsPerCycle,
+      mcpServers: { backtest: mcp },
+      allowedTools: ["get_risk_status", "get_market_data", "get_portfolio", "place_order"],
+      includePartialMessages: true,
+    };
 
-    while (turns < this.config.maxTurnsPerCycle) {
-      turns++;
-
-      const response = await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: 2048,
-        system: `You are an autonomous trading agent. Analyze market data and make trading decisions for symbols: ${this.config.symbols.join(", ")}. ${this.config.allowShorts ? "Short selling is allowed." : "Short selling is NOT allowed."}`,
-        tools,
-        messages,
-      });
-
-      tokens += (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);
-
-      // Collect tool uses
-      const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
-
-      for (const block of response.content) {
-        if (block.type === "text") {
-          reasoning += block.text + "\n";
-        } else if (block.type === "tool_use") {
-          toolUses.push({
-            id: block.id,
-            name: block.name,
-            input: block.input as Record<string, unknown>,
-          });
+    for await (const message of query({ prompt: cyclePrompt, options })) {
+      if (message.type === "stream_event") {
+        const ev: any = (message as any).event;
+        if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+          const text = ev.delta.text as string;
+          if (text) reasoning += text;
         }
       }
-
-      if (toolUses.length === 0) {
-        break;
+      if ((message as any).type === "result" && (message as any).subtype === "success") {
+        const res: any = message;
+        const usage = res.usage;
+        if (usage) tokens += (usage.input_tokens || 0) + (usage.output_tokens || 0);
+        // Ensure reasoning captures final text output if present
+        if (res.result && typeof res.result === "string") {
+          reasoning = reasoning || String(res.result);
+        }
+        turns = res.num_turns ?? this.config.maxTurnsPerCycle;
       }
-
-      // Process tools and collect results
-      const toolResults: Array<{ type: "tool_result"; tool_use_id: string; content: string }> = [];
-
-      for (const toolUse of toolUses) {
-        const result = handleTool(toolUse.name, toolUse.input);
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: toolUse.id,
-          content: JSON.stringify(result),
-        });
-      }
-
-      messages.push({ role: "assistant", content: response.content });
-      messages.push({ role: "user", content: toolResults });
     }
 
     // Estimate cost (Sonnet pricing: ~$3/1M input, ~$15/1M output, assume 50/50)

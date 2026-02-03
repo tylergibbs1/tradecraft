@@ -62,7 +62,7 @@ src/
 | File | Purpose |
 |------|---------|
 | `src/agent/mcp-server.ts` | Trading tools: place_order, cancel_order, get_market_data, etc. |
-| `src/agent/index.ts` | Agent loop with SDK query() |
+| `src/agent/sdk-trading-agent.ts` | Agent loop with SDK query() |
 | `src/agent/permissions.ts` | canUseTool for risk validation |
 | `src/risk/monitor.ts` | Risk limits enforcement |
 | `src/risk/circuit.ts` | Circuit breaker state machine |

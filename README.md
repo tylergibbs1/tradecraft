@@ -171,7 +171,7 @@ bun run dashboard
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        TradingAgent                              │
+│                     SdkTradingAgent (Agent SDK)                  │
 │  • Builds prompts with portfolio state and market context        │
 │  • Sends requests to Claude API                                  │
 │  • Processes tool calls and executes trades                      │
@@ -197,7 +197,7 @@ bun run dashboard
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  1. START CYCLE                                                  │
-│     CLI calls TradingAgent.runCycle()                           │
+│     CLI calls SdkTradingAgent.runCycle()                        │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -354,7 +354,7 @@ Agent performance on historical data (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/
 tradecraft/
 ├── src/
 │   ├── agent/           # Single-agent trading
-│   │   ├── index.ts     # TradingAgent class
+│   │   ├── sdk-trading-agent.ts # Agent SDK trading agent
 │   │   ├── mcp-server.ts # Tool definitions
 │   │   └── prompts.ts   # System and cycle prompts
 │   ├── agents/          # Multi-agent swarm
