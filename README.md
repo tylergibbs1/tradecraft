@@ -55,7 +55,8 @@ bun run cli history
 
 - [Bun](https://bun.sh) runtime
 - Anthropic API key
-- Internet connection (for Yahoo Finance data)
+- Internet connection (for market data)
+- Polygon.io API key (optional — enables real-time quotes, news sentiment, technical indicators, and company data)
 
 ## Installation
 
@@ -76,8 +77,8 @@ bun run setup
 Or manually edit `~/.config/tradecraft/config.toml`:
 
 ```toml
-dataProvider = "yahoo"
-anthropicApiKey = "sk-ant-..."
+dataProvider = "polygon"  # or "yahoo" (free, no key needed)
+dataProviderApiKey = "your-polygon-key"
 
 [agentParams]
 model = "claude-sonnet-4-5-20250929"
@@ -85,7 +86,7 @@ maxTurns = 10
 cycleIntervalMs = 60000
 
 [tradingUniverse]
-symbols = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA"]
+symbols = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"]
 allowShorts = false
 
 [riskLimits]
@@ -100,6 +101,8 @@ maxOrderValue = 10000      # $10k max order
 initialCapital = 100000
 paperTrading = true
 ```
+
+You can also set API keys via environment variables (`ANTHROPIC_API_KEY`, `POLYGON_API_KEY`) or a `.env` file.
 
 ## CLI Commands
 
@@ -137,14 +140,14 @@ paperTrading = true
 ┌───────────────────┐ ┌─────────────────┐ ┌─────────────────┐
 │ Portfolio Manager │ │  Data Manager   │ │  Risk Monitor   │
 │                   │ │                 │ │                 │
-│ • Positions       │ │ • Yahoo Finance │ │ • Position size │
-│ • Cash balance    │ │ • OHLCV data    │ │ • Loss limits   │
-│ • Order execution │ │ • Quote cache   │ │ • Circuit break │
-│ • P&L tracking    │ │                 │ │                 │
+│ • Positions       │ │ • Polygon.io    │ │ • Position size │
+│ • Cash balance    │ │ • Yahoo Finance │ │ • Loss limits   │
+│ • Order execution │ │ • OHLCV + Quote │ │ • Circuit break │
+│ • P&L tracking    │ │ • In-mem cache  │ │                 │
 └───────────────────┘ └─────────────────┘ └─────────────────┘
          │                    │                    │
          ▼                    ▼                    ▼
-   positions.json       Yahoo API         circuit_breaker.json
+   positions.json     Polygon / Yahoo      circuit_breaker.json
 ```
 
 ### Trading Cycle Flow
@@ -222,10 +225,19 @@ paperTrading = true
 | Tool | Purpose |
 |------|---------|
 | `get_risk_status` | Check if trading is allowed, view limits |
-| `get_market_data` | Fetch current prices for symbols |
+| `get_market_data` | Fetch current prices and optional history |
 | `get_portfolio` | View positions, cash, equity, P&L |
 | `place_order` | Execute a buy/sell order |
 | `cancel_order` | Cancel a pending order |
+| `get_technical_indicators` | SMA, EMA, RSI, MACD (Polygon) |
+| `get_sma` | Simple moving average with configurable window (Polygon) |
+| `get_polygon_news` | News with AI sentiment analysis (Polygon) |
+| `get_company_info` | Company details, market cap, employees (Polygon) |
+| `search_tickers` | Search stocks by name or filter (Polygon) |
+| `get_filing` | SEC EDGAR filings (10-K, 10-Q, etc.) |
+| `get_financials` | Financial statements from SEC filings |
+| `get_news` | General financial news search |
+| `exa_search` / `exa_financial_search` | AI-powered web search (Exa) |
 
 ### Key Design Principle
 
@@ -308,20 +320,41 @@ Agent performance on historical data (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/
 ```
 tradecraft/
 ├── src/
-│   ├── agent/           # Trading agent and tools
-│   │   ├── index.ts     # TradingAgent class
-│   │   ├── mcp-server.ts # Tool definitions
-│   │   └── prompts.ts   # System and cycle prompts
-│   ├── backtest/        # Backtesting engines
-│   │   ├── engine.ts    # Rule-based backtester
-│   │   └── agent-engine.ts # Claude agent backtester
-│   ├── config/          # Configuration schemas
-│   ├── data/            # Market data providers
-│   ├── portfolio/       # Position management
-│   ├── risk/            # Risk monitoring
-│   └── cli.ts           # CLI interface
-├── data/                # Persisted state
-├── AGENT_GUIDE.md       # Guide for AI agents
+│   ├── agent/              # Trading agent and tools
+│   │   ├── index.ts        # TradingAgent class
+│   │   ├── mcp-server.ts   # Tool definitions (orders, data, risk, Polygon, Exa, EDGAR)
+│   │   ├── permissions.ts  # canUseTool risk validation
+│   │   ├── hooks.ts        # Pre/post tool hooks for audit logging
+│   │   └── prompts.ts      # System and cycle prompts
+│   ├── agents/             # Multi-agent specialist system
+│   │   ├── specialists/    # Technical, fundamental, macro, sentiment, hypothesis agents
+│   │   ├── portfolio-manager.ts
+│   │   └── signal-bus.ts
+│   ├── backtest/           # Backtesting engines
+│   │   ├── engine.ts       # Rule-based backtester
+│   │   ├── agent-engine.ts # Claude agent backtester
+│   │   └── strategies.ts   # SMA crossover, RSI mean reversion, momentum
+│   ├── config/             # TOML config reader/writer + Zod schemas
+│   ├── data/               # Market data layer
+│   │   ├── types.ts        # OHLCV, Quote, TimeFrame, DataProviderInterface
+│   │   ├── cache.ts        # In-memory cache with TTL
+│   │   ├── index.ts        # DataManager (provider routing + caching)
+│   │   └── providers/
+│   │       ├── yahoo.ts    # Yahoo Finance (free, no API key)
+│   │       ├── polygon/    # Polygon.io (quotes, news, indicators, tickers)
+│   │       ├── edgar.ts    # SEC EDGAR filings
+│   │       ├── exa.ts      # Exa AI search
+│   │       └── news.ts     # Financial news
+│   ├── portfolio/          # Position management + order lifecycle
+│   ├── risk/               # Risk monitor + circuit breaker state machine
+│   ├── journal/            # Trade logging
+│   ├── setup/              # Interactive setup wizard (Ink/React)
+│   ├── ui/                 # TUI app with tabs (Portfolio, Trades, Journal, Agent Log)
+│   ├── main.tsx            # TUI entry point
+│   └── cli.ts              # CLI entry point
+├── data/                   # Persisted state (portfolio, snapshots, circuit breaker)
+├── logs/                   # Audit logs, agent logs, trade journal
+├── AGENT_GUIDE.md          # Guide for AI agents
 └── README.md
 ```
 
