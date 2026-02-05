@@ -495,7 +495,7 @@ export class AgentBacktestEngine {
     };
 
     // Build prompts
-    const systemPrompt = buildSystemPrompt(this.config.symbols, this.config.allowShorts);
+    const systemPrompt = buildSystemPrompt(this.config.symbols, this.config.allowShorts, this.config.riskLimits);
     const portfolioState = portfolio.getState(currentPrices);
 
     // Build a simplified risk status for the cycle prompt

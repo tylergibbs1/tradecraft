@@ -292,7 +292,7 @@ export class TradingAgent {
       const riskStatus = this.deps.riskMonitor.getStatus(snapshot);
 
       // Build prompts
-      const systemPrompt = buildSystemPrompt(this.tradingUniverse, this.allowShorts);
+      const systemPrompt = buildSystemPrompt(this.tradingUniverse, this.allowShorts, this.deps.config.riskLimits);
       const cyclePrompt = buildCyclePrompt(updatedState, riskStatus);
 
       // Convert tools to Anthropic format with proper JSON schema types
