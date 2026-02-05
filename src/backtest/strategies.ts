@@ -40,11 +40,15 @@ export const smaCrossover: Strategy = {
     const bullishCrossover = prevShortSMA <= prevLongSMA && shortSMA > longSMA;
     const bearishCrossover = prevShortSMA >= prevLongSMA && shortSMA < longSMA;
 
+    // Normalize crossover magnitude to 0-1 range (raw value is ~0.001-0.02)
+    const rawStrength = Math.abs(shortSMA - longSMA) / longSMA;
+    const strength = Math.min(1, rawStrength * 100);
+
     if (bullishCrossover && !position) {
       return {
         symbol,
         type: "buy",
-        strength: Math.abs(shortSMA - longSMA) / longSMA,
+        strength,
         reason: "Bullish SMA crossover",
       };
     }
@@ -53,7 +57,7 @@ export const smaCrossover: Strategy = {
       return {
         symbol,
         type: "sell",
-        strength: Math.abs(shortSMA - longSMA) / longSMA,
+        strength,
         reason: "Bearish SMA crossover",
       };
     }
