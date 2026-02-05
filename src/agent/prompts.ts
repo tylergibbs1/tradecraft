@@ -1,6 +1,7 @@
 import { RiskLimits } from "../config/schema.js";
 import { PortfolioState } from "../portfolio/types.js";
 import { RiskStatus } from "../risk/types.js";
+import type { AgentBacktestTrade } from "../backtest/agent-engine.js";
 
 export interface SystemPromptParams {
   tradingUniverse: string[];
@@ -36,7 +37,7 @@ You operate as part of an automated trading system. Each "cycle" you analyze mar
 Success is measured by:
 1. Total returns (primary goal — beat a passive buy-and-hold of the same stocks)
 2. Risk-adjusted returns (Sharpe ratio)
-3. Capital deployment (idle cash earns nothing — put capital to work when you have conviction)
+3. Trade quality (high win rate and profit factor matter more than number of trades)
 </context>
 
 <trading_universe>
@@ -65,11 +66,12 @@ Size positions based on your conviction:
 - LOW conviction (speculative or uncertain): small size (${Math.round(limits.maxPositionSize * 25)}%-${Math.round(limits.maxPositionSize * 50)}% of equity)
 
 Guidelines:
-- Idle cash earns zero return. Deploy capital when you have a thesis.
+- Cash is a valid position. In bearish or uncertain markets, holding cash protects capital.
+- Only deploy capital when you have HIGH conviction backed by 2+ confirming technical signals.
 - Concentrate on your best ideas. You don't have to own everything equally.
 - It's OK to have one position at ${maxPosPct}% and another at 3% based on conviction.
 - Cut losers fast and add to winners. Let your sizing reflect what's working.
-- Keep some cash reserve (5-15%) for opportunities, but don't hold >30% without a bearish thesis.
+- Holding 30-50% cash is perfectly fine if signals are mixed or bearish.
 </position_sizing>
 
 <tools>
@@ -124,6 +126,16 @@ TRADING RULES:
 - Rebalance when conviction changes, not on a fixed schedule
 </strategy>
 
+<anti_churning>
+CRITICAL — These rules prevent destructive overtrading:
+1. MINIMUM HOLD PERIOD: Do NOT sell a position within 5 trading days of buying it unless it hits a stop-loss (down >5% with bearish technicals)
+2. NO ROUND-TRIPS: If you sold a stock, do NOT buy it back within 5 trading days
+3. REQUIRE 2+ CONFIRMING SIGNALS: Before any trade, you MUST have at least 2 of: RSI signal, SMA trend confirmation, MACD momentum confirmation. If you only have 1 signal, do NOT trade.
+4. CASH IS OK: Holding cash is better than forcing a low-conviction trade. You will NOT be penalized for holding cash.
+5. REVIEW HISTORY: Before trading, check your recent trade history. If you see a pattern of buy→sell→loss, STOP and wait for stronger signals.
+6. FEWER BETTER TRADES: 5 high-conviction trades that win are far better than 20 low-conviction trades that mostly lose.
+</anti_churning>
+
 <examples>
 <example>
 Scenario: New portfolio, $100,000 cash, strong bullish signals on 3 of 5 stocks
@@ -165,7 +177,8 @@ Reasoning: System halted trading. Wait for reset.
 
 export function buildCyclePrompt(
   portfolio: PortfolioState,
-  riskStatus: RiskStatus
+  riskStatus: RiskStatus,
+  recentTrades?: AgentBacktestTrade[]
 ): string {
   const positions = Object.values(portfolio.positions);
   const positionsSummary = positions
@@ -202,6 +215,38 @@ export function buildCyclePrompt(
     portfolioStatus = "CAUTION - Elevated drawdown";
   }
 
+  // Build trade history section
+  let tradeHistorySection = "";
+  if (recentTrades && recentTrades.length > 0) {
+    const last15 = recentTrades.slice(-15);
+    const closingTrades = recentTrades.filter(t => t.pnl !== undefined);
+    const wins = closingTrades.filter(t => t.pnl! > 0).length;
+    const losses = closingTrades.filter(t => t.pnl! <= 0).length;
+    const totalPnl = closingTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
+
+    // Detect loss streak
+    const recentClosing = closingTrades.slice(-5);
+    const recentLosses = recentClosing.filter(t => t.pnl! <= 0).length;
+    const onLossStreak = recentClosing.length >= 3 && recentLosses >= 3;
+
+    const tradeLines = last15.map(t => {
+      const pnlStr = t.pnl !== undefined
+        ? ` | P&L: ${t.pnl >= 0 ? "+" : ""}$${t.pnl.toFixed(2)}`
+        : "";
+      return `  [${t.date}] ${t.side.toUpperCase()} ${t.quantity} ${t.symbol} @ $${t.price.toFixed(2)}${pnlStr}`;
+    }).join("\n");
+
+    tradeHistorySection = `
+<recent_trades>
+Last ${last15.length} trades (of ${recentTrades.length} total):
+${tradeLines}
+
+Summary: ${wins} wins, ${losses} losses | Net P&L on closed trades: ${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}
+${onLossStreak ? "\n⚠️ WARNING: You are on a loss streak (" + recentLosses + " of last " + recentClosing.length + " trades were losses). REDUCE trading activity. Only trade with very high conviction and 2+ confirming signals. Holding cash is strongly preferred." : ""}
+</recent_trades>
+`;
+  }
+
   return `<cycle_start>
 This is a new trading cycle. Analyze the current state and decide on actions.
 </cycle_start>
@@ -228,21 +273,23 @@ Current Drawdown: ${(riskStatus.currentDrawdown * 100).toFixed(1)}% (limit: 10%)
 Position Count: ${riskStatus.positionCount}/${riskStatus.maxPositionCount}
 Portfolio Status: ${portfolioStatus}
 </risk_metrics>
-
+${tradeHistorySection}
 <instructions>
 1. FIRST: Call get_risk_status and get_market_data in PARALLEL to get current data
-2. Analyze each position and the overall portfolio
-3. For positions with losses > 3%, check technicals — cut if bearish, hold if oversold bounce likely
-4. For winning positions with bullish signals, consider adding (size up to max)
-5. If holding >20% cash, look for entry opportunities — idle cash is a drag on returns
-6. Execute trades sized by your conviction level
-7. Provide a brief summary of your analysis and actions
+2. Call get_technical_indicators for each symbol you are considering trading
+3. Review your recent trade history above — avoid repeating losing patterns
+4. For positions with losses > 5%, check technicals — cut if bearish, hold if oversold bounce likely
+5. For winning positions with bullish signals, consider adding (size up to max)
+6. ONLY trade if you have 2+ confirming technical signals (RSI + SMA trend, or MACD + price vs SMA, etc.)
+7. If signals are mixed or bearish, holding cash is the correct decision
+8. Execute trades sized by your conviction level
+9. Provide a brief summary of your analysis and actions
 
 Key questions:
-- Where is your highest conviction? Size those positions up.
+- Do the technical indicators confirm your thesis with 2+ signals?
 - Are any positions losing AND technically weak? Cut them.
-- Is cash sitting idle that could be deployed? What's the opportunity cost?
-- Are winners still showing strength? Add to them rather than trimming.
+- Have you recently sold this stock at a loss? If so, do NOT rebuy without overwhelming evidence.
+- Is "no trade" the right call today? Patience is a strategy.
 </instructions>
 
 <output_format>

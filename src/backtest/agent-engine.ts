@@ -5,6 +5,7 @@ import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
 import { RiskLimits } from "../config/schema.js";
 import { buildSystemPrompt, buildCyclePrompt } from "../agent/prompts.js";
 import { PortfolioState, Position, Order, Trade } from "../portfolio/types.js";
+import { getIndicatorSummary } from "./indicators.js";
 
 export interface AgentBacktestConfig {
   startDate: Date;
@@ -329,7 +330,8 @@ export class AgentBacktestEngine {
           portfolio,
           riskMonitor,
           prices,
-          currentPrices
+          currentPrices,
+          allTrades
         );
 
         cycles.push(cycleResult);
@@ -369,7 +371,8 @@ export class AgentBacktestEngine {
     portfolio: SimulatedPortfolio,
     riskMonitor: RiskMonitor,
     prices: Map<string, OHLCV>,
-    currentPrices: Map<string, number>
+    currentPrices: Map<string, number>,
+    allTrades: AgentBacktestTrade[]
   ): Promise<AgentBacktestCycle> {
     const cycleTrades: AgentBacktestTrade[] = [];
     let turns = 0;
@@ -413,7 +416,21 @@ export class AgentBacktestEngine {
           required: ["symbol", "side", "type", "quantity"],
         },
       },
+      {
+        name: "get_technical_indicators",
+        description: "Get technical indicators (SMA, RSI, MACD) for a symbol with pre-computed signals",
+        input_schema: {
+          type: "object",
+          properties: {
+            symbol: { type: "string", description: "Stock symbol" },
+          },
+          required: ["symbol"],
+        },
+      },
     ];
+
+    // Capture for closure
+    const historicalData = this.historicalData;
 
     // Tool handlers
     const handleTool = (name: string, input: Record<string, unknown>): unknown => {
@@ -491,6 +508,25 @@ export class AgentBacktestEngine {
         return { success: false, error: "Order failed" };
       }
 
+      if (name === "get_technical_indicators") {
+        const symbol = (input.symbol as string).toUpperCase();
+        const allBars = historicalData.get(symbol);
+        if (!allBars) {
+          return { success: false, error: `No data for ${symbol}` };
+        }
+
+        // Filter to bars up to and including the current date
+        const currentDateMs = new Date(date + "T23:59:59Z").getTime();
+        const barsToDate = allBars.filter((b) => b.timestamp <= currentDateMs);
+
+        if (barsToDate.length < 2) {
+          return { success: false, error: `Insufficient history for ${symbol}` };
+        }
+
+        const summary = getIndicatorSummary(barsToDate);
+        return { success: true, symbol, date, indicators: summary };
+      }
+
       return { error: "Unknown tool" };
     };
 
@@ -512,7 +548,7 @@ export class AgentBacktestEngine {
       peakEquity: portfolioState.peakEquity,
     };
     const riskStatus = riskMonitor.getStatus(snapshot);
-    const cyclePrompt = buildCyclePrompt(portfolioState, riskStatus);
+    const cyclePrompt = buildCyclePrompt(portfolioState, riskStatus, allTrades);
 
     // Run conversation
     const messages: Anthropic.MessageParam[] = [
