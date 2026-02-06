@@ -31,23 +31,23 @@ export interface LogicNode {
 export type EntryRule = ConditionNode | LogicNode;
 
 export interface ExitRules {
-  stopLossPercent?: number;     // e.g. 0.05 = 5% stop
-  takeProfitPercent?: number;   // e.g. 0.10 = 10% take profit
+  stopLossPercent?: number; // e.g. 0.05 = 5% stop
+  takeProfitPercent?: number; // e.g. 0.10 = 10% take profit
   trailingStopPercent?: number; // e.g. 0.03 = 3% trailing stop
-  timeStopDays?: number;        // Max days to hold
+  timeStopDays?: number; // Max days to hold
 }
 
 export interface PositionSizing {
   method: "fixed_percent" | "conviction_scaled";
-  basePercent: number;  // e.g. 0.05 = 5% of equity
-  maxPercent: number;   // e.g. 0.10 = 10% cap
+  basePercent: number; // e.g. 0.05 = 5% of equity
+  maxPercent: number; // e.g. 0.10 = 10% cap
 }
 
 export interface StrategySpec {
   name: string;
   description: string;
   entryLong: EntryRule;
-  entryShort?: EntryRule;  // Optional, only if shorts allowed
+  entryShort?: EntryRule; // Optional, only if shorts allowed
   exitRules: ExitRules;
   positionSizing: PositionSizing;
 }
@@ -75,7 +75,7 @@ export interface StrategyRecord {
 }
 
 export interface StrategyScore {
-  composite: number;   // 0-1 weighted fitness
+  composite: number; // 0-1 weighted fitness
   sharpe: number;
   totalReturn: number;
   maxDrawdown: number;

@@ -5,19 +5,19 @@
  * AI-native hedge fund architecture.
  */
 
-export type SignalStrength = 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
+export type SignalStrength = "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "STRONG_SELL";
 
-export type SignalTimeframe = 'intraday' | 'day' | 'week' | 'month' | 'quarter';
+export type SignalTimeframe = "intraday" | "day" | "week" | "month" | "quarter";
 
 export type AgentRole =
-  | 'portfolio-manager'
-  | 'fundamental-analyst'
-  | 'earnings-analyst'
-  | 'technical-analyst'
-  | 'sentiment-analyst'
-  | 'macro-analyst'
-  | 'catalyst-analyst'
-  | 'hypothesis-generator';
+  | "portfolio-manager"
+  | "fundamental-analyst"
+  | "earnings-analyst"
+  | "technical-analyst"
+  | "sentiment-analyst"
+  | "macro-analyst"
+  | "catalyst-analyst"
+  | "hypothesis-generator";
 
 export interface AgentSignal {
   id: string;
@@ -25,49 +25,49 @@ export interface AgentSignal {
   agentRole: AgentRole;
   symbol: string;
   signal: SignalStrength;
-  confidence: number;       // 0-1
+  confidence: number; // 0-1
   timeframe: SignalTimeframe;
   reasoning: string;
-  thesis?: string;          // Investment thesis summary
+  thesis?: string; // Investment thesis summary
   priceTarget?: number;
   stopLoss?: number;
-  catalysts?: string[];     // Expected catalysts
-  risks?: string[];         // Key risks
-  data?: Record<string, unknown>;  // Supporting metrics/data
-  expiresAt?: string;       // ISO timestamp when signal becomes stale
-  timestamp: string;        // ISO timestamp
+  catalysts?: string[]; // Expected catalysts
+  risks?: string[]; // Key risks
+  data?: Record<string, unknown>; // Supporting metrics/data
+  expiresAt?: string; // ISO timestamp when signal becomes stale
+  timestamp: string; // ISO timestamp
 }
 
 export interface ConsensusResult {
   symbol: string;
-  weightedScore: number;      // -2 (STRONG_SELL) to +2 (STRONG_BUY)
+  weightedScore: number; // -2 (STRONG_SELL) to +2 (STRONG_BUY)
   signalCount: number;
   averageConfidence: number;
   recommendation: SignalStrength;
-  positionSizeMultiplier: number;  // 0-1 based on consensus strength
+  positionSizeMultiplier: number; // 0-1 based on consensus strength
   signals: AgentSignal[];
-  dissent?: string[];         // Agents with opposing views
+  dissent?: string[]; // Agents with opposing views
   timestamp: string;
 }
 
 export interface AgentWeights {
-  'fundamental-analyst': number;
-  'earnings-analyst': number;
-  'technical-analyst': number;
-  'sentiment-analyst': number;
-  'macro-analyst': number;
-  'catalyst-analyst': number;
-  'hypothesis-generator': number;
+  "fundamental-analyst": number;
+  "earnings-analyst": number;
+  "technical-analyst": number;
+  "sentiment-analyst": number;
+  "macro-analyst": number;
+  "catalyst-analyst": number;
+  "hypothesis-generator": number;
 }
 
 export const DEFAULT_AGENT_WEIGHTS: AgentWeights = {
-  'fundamental-analyst': 0.25,    // 10-K/10-Q analysis
-  'earnings-analyst': 0.20,       // Earnings call analysis
-  'technical-analyst': 0.15,      // Price/volume patterns
-  'sentiment-analyst': 0.10,      // News/social sentiment
-  'macro-analyst': 0.15,          // Sector/macro signals
-  'catalyst-analyst': 0.10,       // Event-driven
-  'hypothesis-generator': 0.05,   // Novel alpha ideas
+  "fundamental-analyst": 0.25, // 10-K/10-Q analysis
+  "earnings-analyst": 0.2, // Earnings call analysis
+  "technical-analyst": 0.15, // Price/volume patterns
+  "sentiment-analyst": 0.1, // News/social sentiment
+  "macro-analyst": 0.15, // Sector/macro signals
+  "catalyst-analyst": 0.1, // Event-driven
+  "hypothesis-generator": 0.05, // Novel alpha ideas
 };
 
 export interface ResearchContext {
@@ -79,7 +79,7 @@ export interface ResearchContext {
   recentNews?: NewsItem[];
   recentFilings?: FilingMetadata[];
   priceHistory?: PriceBar[];
-  existingSignals?: AgentSignal[];  // Signals from other agents
+  existingSignals?: AgentSignal[]; // Signals from other agents
 }
 
 export interface NewsItem {
@@ -87,12 +87,12 @@ export interface NewsItem {
   source: string;
   url?: string;
   publishedAt: string;
-  sentiment?: number;  // -1 to 1
+  sentiment?: number; // -1 to 1
   summary?: string;
 }
 
 export interface FilingMetadata {
-  form: string;        // 10-K, 10-Q, 8-K, etc.
+  form: string; // 10-K, 10-Q, 8-K, etc.
   filedAt: string;
   periodEnd?: string;
   url: string;
@@ -128,13 +128,13 @@ export interface FinancialMetrics {
 
 export interface EarningsCallData {
   symbol: string;
-  quarter: string;      // e.g., "Q4 2024"
+  quarter: string; // e.g., "Q4 2024"
   date: string;
   transcript?: string;
   participants?: string[];
   keyTopics?: string[];
   guidanceChanges?: string[];
-  managementTone?: 'positive' | 'neutral' | 'cautious' | 'negative';
+  managementTone?: "positive" | "neutral" | "cautious" | "negative";
 }
 
 export interface Hypothesis {
@@ -154,7 +154,7 @@ export interface Hypothesis {
     winRate?: number;
     profitFactor?: number;
   };
-  status: 'proposed' | 'validating' | 'active' | 'expired' | 'rejected';
+  status: "proposed" | "validating" | "active" | "expired" | "rejected";
   createdAt: string;
   validatedAt?: string;
   expiresAt?: string;
@@ -174,7 +174,7 @@ export interface AgentCycleContext {
     circuitBreaker: string;
     currentDrawdown: number;
   };
-  marketRegime?: 'risk-on' | 'risk-off' | 'neutral';
+  marketRegime?: "risk-on" | "risk-off" | "neutral";
 }
 
 export interface ResearchAgentConfig {
@@ -183,7 +183,7 @@ export interface ResearchAgentConfig {
   model: string;
   maxTokens: number;
   systemPrompt?: string;
-  focusSymbols?: string[];      // Subset of universe to focus on
-  signalThreshold?: number;     // Min confidence to emit signal
+  focusSymbols?: string[]; // Subset of universe to focus on
+  signalThreshold?: number; // Min confidence to emit signal
   maxSignalsPerCycle?: number;
 }

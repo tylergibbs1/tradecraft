@@ -8,30 +8,27 @@
  * - Signal bus for inter-agent communication
  */
 
-// Core types
-export * from './types.js';
-
-// Signal bus for inter-agent communication
-export { SignalBus, getSharedSignalBus, resetSharedSignalBus } from './signal-bus.js';
-
 // Base agent class
-export { ResearchAgent, ResearchAgentDependencies, AnalysisCycleResult } from './base.js';
+export { AnalysisCycleResult, ResearchAgent, ResearchAgentDependencies } from "./base.js";
+// Portfolio manager (orchestrator)
+export {
+  createSwarm,
+  PortfolioManagerAgent,
+  PortfolioManagerConfig,
+  PortfolioManagerDependencies,
+  SwarmCycleResult,
+  TradeDecision,
+} from "./portfolio-manager.js";
+// Signal bus for inter-agent communication
+export { getSharedSignalBus, resetSharedSignalBus, SignalBus } from "./signal-bus.js";
 
 // Specialist agents
 export {
   FundamentalAnalyst,
-  TechnicalAnalyst,
-  SentimentAnalyst,
-  MacroAnalyst,
   HypothesisGenerator,
-} from './specialists/index.js';
-
-// Portfolio manager (orchestrator)
-export {
-  PortfolioManagerAgent,
-  PortfolioManagerConfig,
-  PortfolioManagerDependencies,
-  TradeDecision,
-  SwarmCycleResult,
-  createSwarm,
-} from './portfolio-manager.js';
+  MacroAnalyst,
+  SentimentAnalyst,
+  TechnicalAnalyst,
+} from "./specialists/index.js";
+// Core types
+export * from "./types.js";

@@ -1,8 +1,8 @@
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import * as TOML from "@iarna/toml";
-import { Config, ConfigSchema, defaultConfig } from "./schema.js";
+import { type Config, ConfigSchema, defaultConfig } from "./schema.js";
 
 const CONFIG_DIR = path.join(os.homedir(), ".config", "tradecraft");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.toml");

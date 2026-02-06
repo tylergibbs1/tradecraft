@@ -6,9 +6,9 @@
  */
 
 import {
-  PolygonQuotesProvider,
-  PolygonNewsProvider,
   PolygonIndicatorsProvider,
+  PolygonNewsProvider,
+  PolygonQuotesProvider,
   PolygonTickersProvider,
 } from "../src/data/providers/polygon/index.js";
 
@@ -48,7 +48,7 @@ async function testNews() {
     console.log(`  ✅ News for ${TEST_SYMBOL}: ${articles.length} articles`);
 
     for (const article of articles.slice(0, 2)) {
-      const sentiment = article.insights.find(i => i.ticker === TEST_SYMBOL);
+      const sentiment = article.insights.find((i) => i.ticker === TEST_SYMBOL);
       console.log(`     - "${article.title.slice(0, 60)}..."`);
       console.log(`       Sentiment: ${sentiment?.sentiment || "N/A"}`);
     }

@@ -1,6 +1,6 @@
-import * as fs from "fs";
-import * as path from "path";
-import { CircuitBreakerState, CircuitBreakerStatus } from "./types.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { CircuitBreakerState, CircuitBreakerStatus } from "./types.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const CIRCUIT_BREAKER_FILE = path.join(DATA_DIR, "circuit_breaker.json");
@@ -50,12 +50,8 @@ export class CircuitBreaker {
 
         this.state = persisted.state;
         this.reason = persisted.reason;
-        this.triggeredAt = persisted.triggeredAt
-          ? new Date(persisted.triggeredAt)
-          : undefined;
-        this.cooldownEndsAt = persisted.cooldownEndsAt
-          ? new Date(persisted.cooldownEndsAt)
-          : undefined;
+        this.triggeredAt = persisted.triggeredAt ? new Date(persisted.triggeredAt) : undefined;
+        this.cooldownEndsAt = persisted.cooldownEndsAt ? new Date(persisted.cooldownEndsAt) : undefined;
         this.halfOpenTestsRemaining = persisted.halfOpenTestsRemaining ?? 0;
 
         // Check if cooldown has expired

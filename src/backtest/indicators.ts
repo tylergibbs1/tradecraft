@@ -1,4 +1,4 @@
-import { OHLCV } from "../data/types.js";
+import type { OHLCV } from "../data/types.js";
 
 export interface IndicatorResult {
   sma20?: number[];
@@ -100,7 +100,7 @@ export function computeMACD(
   closes: number[],
   fastPeriod: number = 12,
   slowPeriod: number = 26,
-  signalPeriod: number = 9
+  signalPeriod: number = 9,
 ): { macdLine: number[]; signalLine: number[]; histogram: number[] } {
   const ema12 = computeEMA(closes, fastPeriod);
   const ema26 = computeEMA(closes, slowPeriod);
@@ -108,7 +108,7 @@ export function computeMACD(
   // MACD line = EMA12 - EMA26
   const macdLine: number[] = [];
   for (let i = 0; i < closes.length; i++) {
-    if (isNaN(ema12[i]!) || isNaN(ema26[i]!)) {
+    if (Number.isNaN(ema12[i]!) || Number.isNaN(ema26[i]!)) {
       macdLine.push(NaN);
     } else {
       macdLine.push(ema12[i]! - ema26[i]!);
@@ -117,13 +117,13 @@ export function computeMACD(
 
   // Signal line = 9-period EMA of MACD line
   // Find first valid MACD value
-  const validMacd = macdLine.filter((v) => !isNaN(v));
+  const validMacd = macdLine.filter((v) => !Number.isNaN(v));
   const signalEma = computeEMA(validMacd, signalPeriod);
 
   const signalLine: number[] = [];
   let validIdx = 0;
   for (let i = 0; i < macdLine.length; i++) {
-    if (isNaN(macdLine[i]!)) {
+    if (Number.isNaN(macdLine[i]!)) {
       signalLine.push(NaN);
     } else {
       signalLine.push(signalEma[validIdx]!);
@@ -134,7 +134,7 @@ export function computeMACD(
   // Histogram = MACD - Signal
   const histogram: number[] = [];
   for (let i = 0; i < macdLine.length; i++) {
-    if (isNaN(macdLine[i]!) || isNaN(signalLine[i]!)) {
+    if (Number.isNaN(macdLine[i]!) || Number.isNaN(signalLine[i]!)) {
       histogram.push(NaN);
     } else {
       histogram.push(macdLine[i]! - signalLine[i]!);
@@ -144,12 +144,7 @@ export function computeMACD(
   return { macdLine, signalLine, histogram };
 }
 
-export function computeATR(
-  highs: number[],
-  lows: number[],
-  closes: number[],
-  period: number = 14
-): number[] {
+export function computeATR(highs: number[], lows: number[], closes: number[], period: number = 14): number[] {
   const result: number[] = [];
   if (highs.length < 2) return highs.map(() => NaN);
 
@@ -159,7 +154,7 @@ export function computeATR(
     const tr = Math.max(
       highs[i]! - lows[i]!,
       Math.abs(highs[i]! - closes[i - 1]!),
-      Math.abs(lows[i]! - closes[i - 1]!)
+      Math.abs(lows[i]! - closes[i - 1]!),
     );
     trueRanges.push(tr);
   }
@@ -183,7 +178,7 @@ export function computeATR(
 export function computeBollingerBands(
   closes: number[],
   period: number = 20,
-  stdDevMultiplier: number = 2
+  stdDevMultiplier: number = 2,
 ): { upper: number[]; middle: number[]; lower: number[] } {
   const middle = computeSMA(closes, period);
   const upper: number[] = [];
@@ -197,7 +192,7 @@ export function computeBollingerBands(
       // Calculate standard deviation for the window
       const window = closes.slice(i - period + 1, i + 1);
       const mean = middle[i]!;
-      const variance = window.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;
+      const variance = window.reduce((sum, val) => sum + (val - mean) ** 2, 0) / period;
       const stdDev = Math.sqrt(variance);
       upper.push(mean + stdDevMultiplier * stdDev);
       lower.push(mean - stdDevMultiplier * stdDev);
@@ -237,13 +232,11 @@ export function getIndicatorSummary(bars: OHLCV[]): Record<string, unknown> {
   const lastIdx = len - 1;
 
   const latest = (arr: number[] | undefined) =>
-    arr && lastIdx < arr.length && !isNaN(arr[lastIdx]!)
-      ? Math.round(arr[lastIdx]! * 100) / 100
-      : null;
+    arr && lastIdx < arr.length && !Number.isNaN(arr[lastIdx]!) ? Math.round(arr[lastIdx]! * 100) / 100 : null;
 
   const prevIdx = lastIdx - 1;
   const prev = (arr: number[] | undefined) =>
-    arr && prevIdx >= 0 && prevIdx < arr.length && !isNaN(arr[prevIdx]!)
+    arr && prevIdx >= 0 && prevIdx < arr.length && !Number.isNaN(arr[prevIdx]!)
       ? Math.round(arr[prevIdx]! * 100) / 100
       : null;
 

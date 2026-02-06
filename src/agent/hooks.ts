@@ -1,6 +1,6 @@
-import * as fs from "fs";
-import * as path from "path";
-import { AgentState } from "./types.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { AgentState } from "./types.js";
 
 const LOGS_DIR = path.join(process.cwd(), "logs");
 const AUDIT_DIR = path.join(LOGS_DIR, "audit");
@@ -55,7 +55,7 @@ function getAgentLogPath(): string {
 
 function appendToLog(filePath: string, data: unknown): void {
   ensureLogDirs();
-  fs.appendFileSync(filePath, JSON.stringify(data) + "\n");
+  fs.appendFileSync(filePath, `${JSON.stringify(data)}\n`);
 }
 
 export class AgentLogger {
@@ -182,12 +182,7 @@ export function createHooks(logger: AgentLogger, agentState: { current: AgentSta
       return { continue: true, startTime };
     },
 
-    postToolUse: async (
-      tool: string,
-      input: unknown,
-      result: unknown,
-      context: { startTime?: number }
-    ) => {
+    postToolUse: async (tool: string, input: unknown, result: unknown, context: { startTime?: number }) => {
       logger.logToolResult(tool, input, result, context.startTime ?? Date.now());
 
       // Check if we should continue

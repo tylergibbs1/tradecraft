@@ -9,28 +9,23 @@
  * strategies humans wouldn't think of.
  */
 
-import {
-  ResearchAgent,
-  ResearchAgentDependencies,
-  ToolDefinition,
-} from '../base.js';
-import {
+import { v4 as uuidv4 } from "uuid";
+import { ResearchAgent, type ResearchAgentDependencies, type ToolDefinition } from "../base.js";
+import type {
+  AgentSignal,
+  ConsensusResult,
+  Hypothesis,
   ResearchAgentConfig,
   ResearchContext,
-  AgentSignal,
   SignalStrength,
-  Hypothesis,
-  ConsensusResult,
-} from '../types.js';
-import { SignalBus, getSharedSignalBus } from '../signal-bus.js';
-import { v4 as uuidv4 } from 'uuid';
+} from "../types.js";
 
 interface HypothesisStore {
   hypotheses: Hypothesis[];
-  addHypothesis(h: Omit<Hypothesis, 'id' | 'createdAt' | 'status'>): Hypothesis;
+  addHypothesis(h: Omit<Hypothesis, "id" | "createdAt" | "status">): Hypothesis;
   getActive(): Hypothesis[];
   getBySymbol(symbol: string): Hypothesis[];
-  updateStatus(id: string, status: Hypothesis['status']): void;
+  updateStatus(id: string, status: Hypothesis["status"]): void;
   prune(maxAge: number): number;
 }
 
@@ -40,11 +35,11 @@ function createHypothesisStore(): HypothesisStore {
   return {
     hypotheses,
 
-    addHypothesis(h: Omit<Hypothesis, 'id' | 'createdAt' | 'status'>): Hypothesis {
+    addHypothesis(h: Omit<Hypothesis, "id" | "createdAt" | "status">): Hypothesis {
       const hypothesis: Hypothesis = {
         ...h,
         id: uuidv4(),
-        status: 'proposed',
+        status: "proposed",
         createdAt: new Date().toISOString(),
       };
       hypotheses.push(hypothesis);
@@ -52,18 +47,18 @@ function createHypothesisStore(): HypothesisStore {
     },
 
     getActive(): Hypothesis[] {
-      return hypotheses.filter(h => h.status === 'active' || h.status === 'validating');
+      return hypotheses.filter((h) => h.status === "active" || h.status === "validating");
     },
 
     getBySymbol(symbol: string): Hypothesis[] {
-      return hypotheses.filter(h => h.symbols.includes(symbol));
+      return hypotheses.filter((h) => h.symbols.includes(symbol));
     },
 
-    updateStatus(id: string, status: Hypothesis['status']): void {
-      const h = hypotheses.find(h => h.id === id);
+    updateStatus(id: string, status: Hypothesis["status"]): void {
+      const h = hypotheses.find((h) => h.id === id);
       if (h) {
         h.status = status;
-        if (status === 'active') {
+        if (status === "active") {
           h.validatedAt = new Date().toISOString();
         }
       }
@@ -72,8 +67,8 @@ function createHypothesisStore(): HypothesisStore {
     prune(maxAge: number): number {
       const cutoff = Date.now() - maxAge;
       const before = hypotheses.length;
-      const toKeep = hypotheses.filter(h => {
-        if (h.status === 'active') return true;
+      const toKeep = hypotheses.filter((h) => {
+        if (h.status === "active") return true;
         return new Date(h.createdAt).getTime() > cutoff;
       });
       hypotheses.length = 0;
@@ -86,23 +81,20 @@ function createHypothesisStore(): HypothesisStore {
 export class HypothesisGenerator extends ResearchAgent {
   private hypothesisStore: HypothesisStore;
 
-  constructor(
-    config: Omit<ResearchAgentConfig, 'role'>,
-    deps: ResearchAgentDependencies
-  ) {
-    super({ ...config, role: 'hypothesis-generator' }, deps);
+  constructor(config: Omit<ResearchAgentConfig, "role">, deps: ResearchAgentDependencies) {
+    super({ ...config, role: "hypothesis-generator" }, deps);
     this.hypothesisStore = createHypothesisStore();
   }
 
   protected getTools(): ToolDefinition[] {
     return [
       {
-        name: 'get_all_signals',
-        description: 'Get all recent signals from specialist agents across all symbols',
+        name: "get_all_signals",
+        description: "Get all recent signals from specialist agents across all symbols",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            maxAge: { type: 'number', description: 'Max age in hours (default 24)' },
+            maxAge: { type: "number", description: "Max age in hours (default 24)" },
           },
         },
         handler: async (input: Record<string, unknown>) => {
@@ -125,20 +117,23 @@ export class HypothesisGenerator extends ResearchAgent {
         },
       },
       {
-        name: 'get_consensus_overview',
-        description: 'Get consensus view across all symbols',
+        name: "get_consensus_overview",
+        description: "Get consensus view across all symbols",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {},
         },
         handler: async () => {
           const allConsensus = this.signalBus.getAllConsensus();
-          const results: Record<string, {
-            recommendation: SignalStrength;
-            confidence: number;
-            signalCount: number;
-            dissent: boolean;
-          }> = {};
+          const results: Record<
+            string,
+            {
+              recommendation: SignalStrength;
+              confidence: number;
+              signalCount: number;
+              dissent: boolean;
+            }
+          > = {};
 
           for (const [symbol, consensus] of allConsensus) {
             results[symbol] = {
@@ -156,10 +151,10 @@ export class HypothesisGenerator extends ResearchAgent {
         },
       },
       {
-        name: 'find_disagreements',
-        description: 'Find symbols where specialist agents disagree (potential alpha)',
+        name: "find_disagreements",
+        description: "Find symbols where specialist agents disagree (potential alpha)",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {},
         },
         handler: async () => {
@@ -187,10 +182,10 @@ export class HypothesisGenerator extends ResearchAgent {
         },
       },
       {
-        name: 'find_signal_patterns',
-        description: 'Analyze patterns in signals across symbols (sector trends, theme clusters)',
+        name: "find_signal_patterns",
+        description: "Analyze patterns in signals across symbols (sector trends, theme clusters)",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {},
         },
         handler: async () => {
@@ -203,21 +198,36 @@ export class HypothesisGenerator extends ResearchAgent {
           for (const signal of signals) {
             // Count by role
             const roleStats = byRole.get(signal.agentRole) || { bullish: 0, bearish: 0 };
-            if (signal.signal === 'BUY' || signal.signal === 'STRONG_BUY') {
+            if (signal.signal === "BUY" || signal.signal === "STRONG_BUY") {
               roleStats.bullish++;
-            } else if (signal.signal === 'SELL' || signal.signal === 'STRONG_SELL') {
+            } else if (signal.signal === "SELL" || signal.signal === "STRONG_SELL") {
               roleStats.bearish++;
             }
             byRole.set(signal.agentRole, roleStats);
 
             // Extract themes from reasoning
             const words = signal.reasoning.toLowerCase().split(/\s+/);
-            const themeWords = ['growth', 'value', 'momentum', 'quality', 'risk', 'margin',
-              'revenue', 'earnings', 'catalyst', 'breakout', 'support', 'resistance',
-              'sentiment', 'macro', 'sector', 'rotation'];
+            const themeWords = [
+              "growth",
+              "value",
+              "momentum",
+              "quality",
+              "risk",
+              "margin",
+              "revenue",
+              "earnings",
+              "catalyst",
+              "breakout",
+              "support",
+              "resistance",
+              "sentiment",
+              "macro",
+              "sector",
+              "rotation",
+            ];
 
             for (const word of words) {
-              if (themeWords.some(t => word.includes(t))) {
+              if (themeWords.some((t) => word.includes(t))) {
                 themes.set(word, (themes.get(word) || 0) + 1);
               }
             }
@@ -233,25 +243,25 @@ export class HypothesisGenerator extends ResearchAgent {
         },
       },
       {
-        name: 'get_existing_hypotheses',
-        description: 'Get current hypotheses being tracked',
+        name: "get_existing_hypotheses",
+        description: "Get current hypotheses being tracked",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            status: { type: 'string', description: 'Filter by status' },
+            status: { type: "string", description: "Filter by status" },
           },
         },
         handler: async (input: Record<string, unknown>) => {
-          const status = input.status as Hypothesis['status'] | undefined;
+          const status = input.status as Hypothesis["status"] | undefined;
           let hypotheses = this.hypothesisStore.hypotheses;
 
           if (status) {
-            hypotheses = hypotheses.filter(h => h.status === status);
+            hypotheses = hypotheses.filter((h) => h.status === status);
           }
 
           return {
             count: hypotheses.length,
-            hypotheses: hypotheses.map(h => ({
+            hypotheses: hypotheses.map((h) => ({
               id: h.id,
               title: h.title,
               symbols: h.symbols,
@@ -264,43 +274,43 @@ export class HypothesisGenerator extends ResearchAgent {
         },
       },
       {
-        name: 'record_hypothesis',
-        description: 'Record a new trading hypothesis for tracking',
+        name: "record_hypothesis",
+        description: "Record a new trading hypothesis for tracking",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            title: { type: 'string', description: 'Short title for the hypothesis' },
-            description: { type: 'string', description: 'Detailed description' },
-            thesis: { type: 'string', description: 'One-sentence investment thesis' },
+            title: { type: "string", description: "Short title for the hypothesis" },
+            description: { type: "string", description: "Detailed description" },
+            thesis: { type: "string", description: "One-sentence investment thesis" },
             symbols: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Symbols involved',
+              type: "array",
+              items: { type: "string" },
+              description: "Symbols involved",
             },
-            expectedReturn: { type: 'number', description: 'Expected return (e.g., 0.15 for 15%)' },
-            timeHorizon: { type: 'string', description: 'Time horizon (day/week/month/quarter)' },
-            confidence: { type: 'number', description: 'Confidence 0-1' },
+            expectedReturn: { type: "number", description: "Expected return (e.g., 0.15 for 15%)" },
+            timeHorizon: { type: "string", description: "Time horizon (day/week/month/quarter)" },
+            confidence: { type: "number", description: "Confidence 0-1" },
             supportingEvidence: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Supporting evidence',
+              type: "array",
+              items: { type: "string" },
+              description: "Supporting evidence",
             },
             risks: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Key risks',
+              type: "array",
+              items: { type: "string" },
+              description: "Key risks",
             },
           },
-          required: ['title', 'thesis', 'symbols', 'expectedReturn', 'confidence'],
+          required: ["title", "thesis", "symbols", "expectedReturn", "confidence"],
         },
         handler: async (input: Record<string, unknown>) => {
           const hypothesis = this.hypothesisStore.addHypothesis({
             title: input.title as string,
-            description: (input.description as string) || '',
+            description: (input.description as string) || "",
             thesis: input.thesis as string,
             symbols: input.symbols as string[],
             expectedReturn: input.expectedReturn as number,
-            timeHorizon: (input.timeHorizon as Hypothesis['timeHorizon']) || 'month',
+            timeHorizon: (input.timeHorizon as Hypothesis["timeHorizon"]) || "month",
             confidence: input.confidence as number,
             supportingEvidence: (input.supportingEvidence as string[]) || [],
             risks: (input.risks as string[]) || [],
@@ -372,10 +382,7 @@ After your analysis, provide any novel hypotheses in this JSON format:
 Be creative but rigorous. The best hypotheses are non-obvious but well-supported by evidence. Don't just repeat what the specialists said - find what they MISSED.`;
   }
 
-  protected buildAnalysisPrompt(
-    symbol: string,
-    context: ResearchContext
-  ): string {
+  protected buildAnalysisPrompt(_symbol: string, _context: ResearchContext): string {
     // For hypothesis generator, we analyze across all symbols, not just one
     let prompt = `Analyze all specialist agent signals to identify novel alpha opportunities.\n\n`;
 
@@ -401,11 +408,11 @@ Provide your findings in the JSON format specified. Focus on NON-OBVIOUS insight
   }
 
   protected parseSignals(
-    symbol: string,
+    _symbol: string,
     response: string,
-    context: ResearchContext
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] {
-    const signals: Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] = [];
+    _context: ResearchContext,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] {
+    const signals: Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] = [];
 
     // Extract JSON from response
     const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
@@ -420,9 +427,9 @@ Provide your findings in the JSON format specified. Focus on NON-OBVIOUS insight
           for (const sym of h.symbols || []) {
             signals.push({
               symbol: sym,
-              signal: h.signal === 'SELL' ? 'SELL' : 'BUY',
+              signal: h.signal === "SELL" ? "SELL" : "BUY",
               confidence: h.confidence || 0.6,
-              timeframe: h.timeHorizon || 'month',
+              timeframe: h.timeHorizon || "month",
               reasoning: h.reasoning || h.thesis,
               thesis: h.thesis,
               catalysts: h.supportingEvidence,
@@ -460,7 +467,7 @@ Provide your findings in the JSON format specified. Focus on NON-OBVIOUS insight
   /**
    * Update hypothesis status (e.g., after backtesting)
    */
-  updateHypothesisStatus(id: string, status: Hypothesis['status']): void {
+  updateHypothesisStatus(id: string, status: Hypothesis["status"]): void {
     this.hypothesisStore.updateStatus(id, status);
   }
 

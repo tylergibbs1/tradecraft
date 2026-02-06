@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import { useState } from "react";
 
 interface TextInputProps {
   label: string;
@@ -8,12 +8,7 @@ interface TextInputProps {
   onSubmit: (value: string) => void;
 }
 
-export function TextInput({
-  label,
-  placeholder = "",
-  defaultValue = "",
-  onSubmit,
-}: TextInputProps) {
+export function TextInput({ label, placeholder = "", defaultValue = "", onSubmit }: TextInputProps) {
   const [value, setValue] = useState(defaultValue);
 
   useInput((input, key) => {
@@ -29,10 +24,7 @@ export function TextInput({
   return (
     <Box flexDirection="column">
       <Text>
-        {label}:{" "}
-        <Text color="cyan">
-          {value || <Text color="gray">{placeholder}</Text>}
-        </Text>
+        {label}: <Text color="cyan">{value || <Text color="gray">{placeholder}</Text>}</Text>
         <Text color="cyan">▋</Text>
       </Text>
       <Box marginTop={1}>

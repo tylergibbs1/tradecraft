@@ -5,18 +5,8 @@
  * and market regimes to provide context for individual stock decisions.
  */
 
-import {
-  ResearchAgent,
-  ResearchAgentDependencies,
-  ToolDefinition,
-} from '../base.js';
-import {
-  ResearchAgentConfig,
-  ResearchContext,
-  AgentSignal,
-  SignalStrength,
-  PriceBar,
-} from '../types.js';
+import { ResearchAgent, type ResearchAgentDependencies, type ToolDefinition } from "../base.js";
+import type { AgentSignal, PriceBar, ResearchAgentConfig, ResearchContext, SignalStrength } from "../types.js";
 
 interface SectorPerformance {
   sector: string;
@@ -28,57 +18,57 @@ interface SectorPerformance {
 }
 
 interface MarketRegime {
-  regime: 'risk-on' | 'risk-off' | 'neutral';
-  volatilityLevel: 'low' | 'normal' | 'high' | 'extreme';
-  trendStrength: 'strong' | 'moderate' | 'weak';
-  breadth: 'healthy' | 'narrow' | 'deteriorating';
+  regime: "risk-on" | "risk-off" | "neutral";
+  volatilityLevel: "low" | "normal" | "high" | "extreme";
+  trendStrength: "strong" | "moderate" | "weak";
+  breadth: "healthy" | "narrow" | "deteriorating";
 }
 
 // Sector ETFs for rotation analysis
 const SECTOR_ETFS: Record<string, string> = {
-  'Technology': 'XLK',
-  'Healthcare': 'XLV',
-  'Financials': 'XLF',
-  'Consumer Discretionary': 'XLY',
-  'Consumer Staples': 'XLP',
-  'Energy': 'XLE',
-  'Industrials': 'XLI',
-  'Materials': 'XLB',
-  'Utilities': 'XLU',
-  'Real Estate': 'XLRE',
-  'Communication Services': 'XLC',
+  Technology: "XLK",
+  Healthcare: "XLV",
+  Financials: "XLF",
+  "Consumer Discretionary": "XLY",
+  "Consumer Staples": "XLP",
+  Energy: "XLE",
+  Industrials: "XLI",
+  Materials: "XLB",
+  Utilities: "XLU",
+  "Real Estate": "XLRE",
+  "Communication Services": "XLC",
 };
 
 // Market ETFs for regime analysis
 const MARKET_ETFS = {
-  sp500: 'SPY',
-  nasdaq: 'QQQ',
-  smallCap: 'IWM',
-  bonds: 'TLT',
-  volatility: 'VIX',
-  gold: 'GLD',
+  sp500: "SPY",
+  nasdaq: "QQQ",
+  smallCap: "IWM",
+  bonds: "TLT",
+  volatility: "VIX",
+  gold: "GLD",
 };
 
 export class MacroAnalyst extends ResearchAgent {
   private priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
 
   constructor(
-    config: Omit<ResearchAgentConfig, 'role'>,
+    config: Omit<ResearchAgentConfig, "role">,
     deps: ResearchAgentDependencies & {
       priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
-    }
+    },
   ) {
-    super({ ...config, role: 'macro-analyst' }, deps);
+    super({ ...config, role: "macro-analyst" }, deps);
     this.priceDataFetcher = deps.priceDataFetcher;
   }
 
   protected getTools(): ToolDefinition[] {
     return [
       {
-        name: 'get_sector_rotation',
-        description: 'Analyze sector performance and rotation trends',
+        name: "get_sector_rotation",
+        description: "Analyze sector performance and rotation trends",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {},
         },
         handler: async () => {
@@ -86,10 +76,10 @@ export class MacroAnalyst extends ResearchAgent {
         },
       },
       {
-        name: 'get_market_regime',
-        description: 'Determine current market regime (risk-on/risk-off, volatility, trend)',
+        name: "get_market_regime",
+        description: "Determine current market regime (risk-on/risk-off, volatility, trend)",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {},
         },
         handler: async () => {
@@ -97,14 +87,14 @@ export class MacroAnalyst extends ResearchAgent {
         },
       },
       {
-        name: 'get_relative_strength',
-        description: 'Compare a symbol\'s performance to the S&P 500',
+        name: "get_relative_strength",
+        description: "Compare a symbol's performance to the S&P 500",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
           },
-          required: ['symbol'],
+          required: ["symbol"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
@@ -112,15 +102,15 @@ export class MacroAnalyst extends ResearchAgent {
         },
       },
       {
-        name: 'get_sector_for_symbol',
-        description: 'Get sector context for a specific symbol',
+        name: "get_sector_for_symbol",
+        description: "Get sector context for a specific symbol",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
-            sector: { type: 'string', description: 'Sector name (e.g., Technology, Healthcare)' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
+            sector: { type: "string", description: "Sector name (e.g., Technology, Healthcare)" },
           },
-          required: ['symbol', 'sector'],
+          required: ["symbol", "sector"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
@@ -178,10 +168,7 @@ After your analysis, provide a trading signal in this exact JSON format:
 Focus on whether macro conditions support or hinder the stock's potential. Even great companies struggle in unfavorable macro environments.`;
   }
 
-  protected buildAnalysisPrompt(
-    symbol: string,
-    context: ResearchContext
-  ): string {
+  protected buildAnalysisPrompt(symbol: string, context: ResearchContext): string {
     let prompt = `Analyze the macro environment for ${symbol} to determine if conditions are favorable.\n\n`;
 
     if (context.sector) {
@@ -196,7 +183,7 @@ Focus on whether macro conditions support or hinder the stock's potential. Even 
       for (const sig of context.existingSignals.slice(0, 3)) {
         prompt += `- ${sig.agentRole}: ${sig.signal} (${sig.confidence.toFixed(2)} confidence)\n`;
       }
-      prompt += '\nProvide macro context for these views.\n\n';
+      prompt += "\nProvide macro context for these views.\n\n";
     }
 
     prompt += `Steps:
@@ -219,9 +206,9 @@ Provide your signal in the JSON format specified.`;
   protected parseSignals(
     symbol: string,
     response: string,
-    context: ResearchContext
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] {
-    const signals: Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] = [];
+    _context: ResearchContext,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] {
+    const signals: Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] = [];
 
     const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
     if (!jsonMatch) {
@@ -248,13 +235,13 @@ Provide your signal in the JSON format specified.`;
 
   private createSignalFromParsed(
     symbol: string,
-    parsed: Record<string, unknown>
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'> {
+    parsed: Record<string, unknown>,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole"> {
     return {
       symbol,
       signal: parsed.signal as SignalStrength,
       confidence: Math.max(0, Math.min(1, parsed.confidence as number)),
-      timeframe: (parsed.timeframe as 'week' | 'month') || 'month',
+      timeframe: (parsed.timeframe as "week" | "month") || "month",
       reasoning: parsed.reasoning as string,
       data: parsed.data as Record<string, unknown> | undefined,
     };
@@ -291,24 +278,22 @@ Provide your signal in the JSON format specified.`;
     // Sort by 1-month relative strength
     sectors.sort((a, b) => b.relativeStrength - a.relativeStrength);
 
-    const leadingSectors = sectors.slice(0, 3).map(s => s.sector);
-    const laggingSectors = sectors.slice(-3).map(s => s.sector);
+    const leadingSectors = sectors.slice(0, 3).map((s) => s.sector);
+    const laggingSectors = sectors.slice(-3).map((s) => s.sector);
 
     // Determine rotation signal
-    let rotationSignal = 'neutral';
-    const cyclicalLeading = leadingSectors.some(s =>
-      ['Technology', 'Consumer Discretionary', 'Financials', 'Industrials'].includes(s)
+    let rotationSignal = "neutral";
+    const cyclicalLeading = leadingSectors.some((s) =>
+      ["Technology", "Consumer Discretionary", "Financials", "Industrials"].includes(s),
     );
-    const defensiveLeading = leadingSectors.some(s =>
-      ['Utilities', 'Consumer Staples', 'Healthcare'].includes(s)
-    );
+    const defensiveLeading = leadingSectors.some((s) => ["Utilities", "Consumer Staples", "Healthcare"].includes(s));
 
     if (cyclicalLeading && !defensiveLeading) {
-      rotationSignal = 'risk-on: cyclicals leading';
+      rotationSignal = "risk-on: cyclicals leading";
     } else if (defensiveLeading && !cyclicalLeading) {
-      rotationSignal = 'risk-off: defensives leading';
+      rotationSignal = "risk-off: defensives leading";
     } else {
-      rotationSignal = 'mixed: no clear rotation';
+      rotationSignal = "mixed: no clear rotation";
     }
 
     return {
@@ -319,15 +304,17 @@ Provide your signal in the JSON format specified.`;
     };
   }
 
-  private async analyzeMarketRegime(): Promise<MarketRegime & {
-    details: Record<string, unknown>;
-  }> {
+  private async analyzeMarketRegime(): Promise<
+    MarketRegime & {
+      details: Record<string, unknown>;
+    }
+  > {
     const spyPrices = await this.priceDataFetcher(MARKET_ETFS.sp500, 200);
     const qqq = await this.priceDataFetcher(MARKET_ETFS.nasdaq, 60);
     const iwm = await this.priceDataFetcher(MARKET_ETFS.smallCap, 60);
     const tlt = await this.priceDataFetcher(MARKET_ETFS.bonds, 60);
 
-    const spyCloses = spyPrices.map(p => p.close);
+    const spyCloses = spyPrices.map((p) => p.close);
     const current = spyCloses[spyCloses.length - 1];
 
     // Trend analysis
@@ -337,11 +324,11 @@ Provide your signal in the JSON format specified.`;
     const aboveSma200 = current > sma200;
     const sma50AboveSma200 = sma50 > sma200;
 
-    let trendStrength: 'strong' | 'moderate' | 'weak' = 'weak';
+    let trendStrength: "strong" | "moderate" | "weak" = "weak";
     if (aboveSma50 && aboveSma200 && sma50AboveSma200) {
-      trendStrength = 'strong';
+      trendStrength = "strong";
     } else if (aboveSma50 || aboveSma200) {
-      trendStrength = 'moderate';
+      trendStrength = "moderate";
     }
 
     // Volatility (simplified - use price range)
@@ -350,35 +337,34 @@ Provide your signal in the JSON format specified.`;
       returns.push((spyCloses[i] - spyCloses[i - 1]) / spyCloses[i - 1]);
     }
     const recentReturns = returns.slice(-20);
-    const volatility = Math.sqrt(
-      recentReturns.reduce((sum, r) => sum + r * r, 0) / recentReturns.length
-    ) * Math.sqrt(252) * 100; // Annualized
+    const volatility =
+      Math.sqrt(recentReturns.reduce((sum, r) => sum + r * r, 0) / recentReturns.length) * Math.sqrt(252) * 100; // Annualized
 
-    let volatilityLevel: 'low' | 'normal' | 'high' | 'extreme' = 'normal';
-    if (volatility < 12) volatilityLevel = 'low';
-    else if (volatility > 25) volatilityLevel = 'extreme';
-    else if (volatility > 18) volatilityLevel = 'high';
+    let volatilityLevel: "low" | "normal" | "high" | "extreme" = "normal";
+    if (volatility < 12) volatilityLevel = "low";
+    else if (volatility > 25) volatilityLevel = "extreme";
+    else if (volatility > 18) volatilityLevel = "high";
 
     // Risk appetite
     const qqqReturn = this.calculateReturns(qqq).return1m;
     const iwmReturn = this.calculateReturns(iwm).return1m;
     const tltReturn = this.calculateReturns(tlt).return1m;
 
-    let regime: 'risk-on' | 'risk-off' | 'neutral' = 'neutral';
+    let regime: "risk-on" | "risk-off" | "neutral" = "neutral";
     if (qqqReturn > 0 && iwmReturn > 0 && tltReturn < 0) {
-      regime = 'risk-on';
+      regime = "risk-on";
     } else if (tltReturn > 0 && (qqqReturn < 0 || iwmReturn < 0)) {
-      regime = 'risk-off';
+      regime = "risk-off";
     }
 
     // Breadth (simplified)
     const spyReturn = this.calculateReturns(spyPrices).return1m;
-    let breadth: 'healthy' | 'narrow' | 'deteriorating' = 'healthy';
+    let breadth: "healthy" | "narrow" | "deteriorating" = "healthy";
     if (Math.abs(qqqReturn - iwmReturn) > 0.05) {
-      breadth = 'narrow';
+      breadth = "narrow";
     }
     if (iwmReturn < spyReturn - 0.02) {
-      breadth = 'deteriorating';
+      breadth = "deteriorating";
     }
 
     return {
@@ -391,7 +377,7 @@ Provide your signal in the JSON format specified.`;
         qqq: { return1m: qqqReturn },
         iwm: { return1m: iwmReturn },
         tlt: { return1m: tltReturn },
-        volatility: volatility.toFixed(1) + '%',
+        volatility: `${volatility.toFixed(1)}%`,
       },
     };
   }
@@ -402,7 +388,7 @@ Provide your signal in the JSON format specified.`;
     relativeStrength1m: number;
     relativeStrength3m: number;
     outperforming: boolean;
-    trend: 'improving' | 'stable' | 'deteriorating';
+    trend: "improving" | "stable" | "deteriorating";
   }> {
     const stockPrices = await this.priceDataFetcher(symbol, 90);
     const spyPrices = await this.priceDataFetcher(MARKET_ETFS.sp500, 90);
@@ -414,11 +400,11 @@ Provide your signal in the JSON format specified.`;
     const rs1m = stockReturns.return1m - spyReturns.return1m;
     const rs3m = stockReturns.return3m - spyReturns.return3m;
 
-    let trend: 'improving' | 'stable' | 'deteriorating' = 'stable';
+    let trend: "improving" | "stable" | "deteriorating" = "stable";
     if (rs1w > rs1m && rs1m > 0) {
-      trend = 'improving';
+      trend = "improving";
     } else if (rs1w < rs1m && rs1m < 0) {
-      trend = 'deteriorating';
+      trend = "deteriorating";
     }
 
     return {
@@ -431,10 +417,7 @@ Provide your signal in the JSON format specified.`;
     };
   }
 
-  private async getSectorContext(
-    symbol: string,
-    sector: string
-  ): Promise<Record<string, unknown>> {
+  private async getSectorContext(symbol: string, sector: string): Promise<Record<string, unknown>> {
     const sectorEtf = SECTOR_ETFS[sector];
     if (!sectorEtf) {
       return { error: `Unknown sector: ${sector}` };
@@ -455,14 +438,14 @@ Provide your signal in the JSON format specified.`;
       sector,
       sectorEtf,
       stockVsSector: {
-        '1w': stockReturns.return1w - sectorReturns.return1w,
-        '1m': stockReturns.return1m - sectorReturns.return1m,
-        '3m': stockReturns.return3m - sectorReturns.return3m,
+        "1w": stockReturns.return1w - sectorReturns.return1w,
+        "1m": stockReturns.return1m - sectorReturns.return1m,
+        "3m": stockReturns.return3m - sectorReturns.return3m,
       },
       sectorVsSpy: {
-        '1w': sectorReturns.return1w - spyReturns.return1w,
-        '1m': sectorReturns.return1m - spyReturns.return1m,
-        '3m': sectorReturns.return3m - spyReturns.return3m,
+        "1w": sectorReturns.return1w - spyReturns.return1w,
+        "1m": sectorReturns.return1m - spyReturns.return1m,
+        "3m": sectorReturns.return3m - spyReturns.return3m,
       },
       sectorInFavor: sectorReturns.return1m > spyReturns.return1m,
       stockLeadingSector: stockReturns.return1m > sectorReturns.return1m,
@@ -474,7 +457,7 @@ Provide your signal in the JSON format specified.`;
     return1m: number;
     return3m: number;
   } {
-    const closes = prices.map(p => p.close);
+    const closes = prices.map((p) => p.close);
     const current = closes[closes.length - 1];
 
     const get1wAgo = closes.length >= 5 ? closes[closes.length - 6] : closes[0];

@@ -5,9 +5,9 @@
  */
 
 import { z } from "zod";
-import { EvolutionEngine } from "./engine.js";
-import { StrategyStore } from "./store.js";
-import { StrategySpec } from "./types.js";
+import type { EvolutionEngine } from "./engine.js";
+import type { StrategyStore } from "./store.js";
+import type { StrategySpec } from "./types.js";
 
 // -- Schemas --
 
@@ -35,7 +35,7 @@ const LogicNodeSchema: z.ZodType<unknown> = z.lazy(() =>
   z.object({
     kind: z.enum(["and", "or"]),
     conditions: z.array(z.union([ConditionNodeSchema, LogicNodeSchema])),
-  })
+  }),
 );
 
 const EntryRuleSchema = z.union([ConditionNodeSchema, LogicNodeSchema]);
@@ -83,15 +83,13 @@ const DeployStrategySchema = z.object({
 
 // -- Tool Creator --
 
-export function createEvolutionTools(deps: {
-  engine: EvolutionEngine;
-  store: StrategyStore;
-}) {
+export function createEvolutionTools(deps: { engine: EvolutionEngine; store: StrategyStore }) {
   const { engine, store } = deps;
 
   return {
     propose_strategy: {
-      description: "Propose a new trading strategy using the JSON DSL. Define entry conditions using indicators (SMA, EMA, RSI, MACD, ATR, BOLLINGER) with comparison operators (gt, lt, crosses_above, crosses_below) and AND/OR logic. Include exit rules and position sizing.",
+      description:
+        "Propose a new trading strategy using the JSON DSL. Define entry conditions using indicators (SMA, EMA, RSI, MACD, ATR, BOLLINGER) with comparison operators (gt, lt, crosses_above, crosses_below) and AND/OR logic. Include exit rules and position sizing.",
       inputSchema: ProposeStrategySchema,
       handler: async (input: z.infer<typeof ProposeStrategySchema>) => {
         try {
@@ -117,7 +115,8 @@ export function createEvolutionTools(deps: {
     },
 
     backtest_strategy: {
-      description: "Run a backtest on a proposed strategy against specified symbols. Returns performance metrics and a composite fitness score.",
+      description:
+        "Run a backtest on a proposed strategy against specified symbols. Returns performance metrics and a composite fitness score.",
       inputSchema: BacktestStrategySchema,
       handler: async (input: z.infer<typeof BacktestStrategySchema>) => {
         try {
@@ -154,16 +153,14 @@ export function createEvolutionTools(deps: {
         const results = engine.getResults();
         return {
           success: true,
-          topStrategies: results.topStrategies
-            .slice(0, input.limit ?? 10)
-            .map(r => ({
-              id: r.id,
-              name: r.spec.name,
-              generation: r.generation,
-              score: r.score,
-              status: r.status,
-            })),
-          deployed: results.deployed.map(r => ({
+          topStrategies: results.topStrategies.slice(0, input.limit ?? 10).map((r) => ({
+            id: r.id,
+            name: r.spec.name,
+            generation: r.generation,
+            score: r.score,
+            status: r.status,
+          })),
+          deployed: results.deployed.map((r) => ({
             id: r.id,
             name: r.spec.name,
             score: r.score,
@@ -175,17 +172,14 @@ export function createEvolutionTools(deps: {
     },
 
     evolve_strategy: {
-      description: "Evolve a strategy by creating mutated children, backtesting them, and selecting survivors. Returns the evolved population ranked by fitness.",
+      description:
+        "Evolve a strategy by creating mutated children, backtesting them, and selecting survivors. Returns the evolved population ranked by fitness.",
       inputSchema: EvolveStrategySchema,
       handler: async (input: z.infer<typeof EvolveStrategySchema>) => {
         try {
-          const children = await engine.evolveStrategy(
-            input.strategyId,
-            input.symbols,
-            input.generations ?? 1
-          );
+          const children = await engine.evolveStrategy(input.strategyId, input.symbols, input.generations ?? 1);
           const ranked = children
-            .filter(c => c.score !== undefined)
+            .filter((c) => c.score !== undefined)
             .sort((a, b) => (b.score?.composite ?? 0) - (a.score?.composite ?? 0));
 
           return {
@@ -193,7 +187,7 @@ export function createEvolutionTools(deps: {
             parentId: input.strategyId,
             generations: input.generations ?? 1,
             childrenCreated: children.length,
-            results: ranked.slice(0, 10).map(r => ({
+            results: ranked.slice(0, 10).map((r) => ({
               id: r.id,
               name: r.spec.name,
               generation: r.generation,

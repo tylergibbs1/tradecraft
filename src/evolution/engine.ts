@@ -6,25 +6,41 @@
 
 import { v4 as uuidv4 } from "uuid";
 import { BacktestEngine } from "../backtest/engine.js";
-import { BacktestConfig } from "../backtest/types.js";
-import { DataManager } from "../data/index.js";
+import type { BacktestConfig } from "../backtest/types.js";
+import type { DataManager } from "../data/index.js";
 import { compileStrategy, validateSpec } from "./compiler.js";
 import { scoreBacktestResult, summarizeBacktest } from "./scoring.js";
-import { StrategyStore } from "./store.js";
-import {
-  StrategySpec,
-  StrategyRecord,
-  MutationType,
-  IndicatorRef,
+import type { StrategyStore } from "./store.js";
+import type {
   ConditionNode,
-  LogicNode,
   EntryRule,
+  IndicatorRef,
+  LogicNode,
+  MutationType,
+  StrategyRecord,
+  StrategySpec,
 } from "./types.js";
 
 export interface EvolutionConfig {
-  populationSize: number;      // Children per generation
-  survivorCount: number;       // Keep top N per generation
+  populationSize: number; // Children per generation
+  survivorCount: number; // Keep top N per generation
   backtestConfig: Omit<BacktestConfig, "symbols"> & { symbols?: string[] };
+  seed?: number; // Optional PRNG seed for deterministic mutations
+}
+
+/**
+ * Mulberry32 — a fast, seedable 32-bit PRNG.
+ * Returns a function that produces values in [0, 1) like Math.random().
+ */
+export function createRng(seed?: number): () => number {
+  if (seed === undefined) return Math.random;
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 const DEFAULT_EVOLUTION_CONFIG: EvolutionConfig = {
@@ -44,34 +60,30 @@ const DEFAULT_EVOLUTION_CONFIG: EvolutionConfig = {
  */
 export function mutateStrategy(
   spec: StrategySpec,
-  mutationType?: MutationType
+  mutationType?: MutationType,
+  seed?: number,
 ): { spec: StrategySpec; mutation: MutationType } {
-  const types: MutationType[] = [
-    "adjust_period",
-    "adjust_threshold",
-    "swap_indicator",
-    "adjust_exit",
-    "adjust_sizing",
-  ];
-  const chosen = mutationType ?? types[Math.floor(Math.random() * types.length)]!;
+  const rng = createRng(seed);
+  const types: MutationType[] = ["adjust_period", "adjust_threshold", "swap_indicator", "adjust_exit", "adjust_sizing"];
+  const chosen = mutationType ?? types[Math.floor(rng() * types.length)]!;
   const child = JSON.parse(JSON.stringify(spec)) as StrategySpec;
   child.name = `${spec.name} (mutated)`;
 
   switch (chosen) {
     case "adjust_period":
-      adjustPeriods(child.entryLong);
+      adjustPeriods(child.entryLong, rng);
       break;
     case "adjust_threshold":
-      adjustThresholds(child.entryLong);
+      adjustThresholds(child.entryLong, rng);
       break;
     case "swap_indicator":
       swapIndicators(child.entryLong);
       break;
     case "adjust_exit":
-      adjustExits(child);
+      adjustExits(child, rng);
       break;
     case "adjust_sizing":
-      adjustSizing(child);
+      adjustSizing(child, rng);
       break;
     case "combine_strategies":
       // Handled separately (needs two parents)
@@ -81,7 +93,7 @@ export function mutateStrategy(
   return { spec: child, mutation: chosen };
 }
 
-function adjustPeriods(rule: EntryRule): void {
+function adjustPeriods(rule: EntryRule, rng: () => number): void {
   const walk = (r: EntryRule) => {
     if (r.kind === "comparison") {
       const c = r as ConditionNode;
@@ -90,7 +102,7 @@ function adjustPeriods(rule: EntryRule): void {
           const ref = side as IndicatorRef;
           if (ref.period) {
             const delta = Math.max(1, Math.round(ref.period * 0.2));
-            ref.period += Math.random() > 0.5 ? delta : -delta;
+            ref.period += rng() > 0.5 ? delta : -delta;
             ref.period = Math.max(2, ref.period);
           }
         }
@@ -102,7 +114,7 @@ function adjustPeriods(rule: EntryRule): void {
   walk(rule);
 }
 
-function adjustThresholds(rule: EntryRule): void {
+function adjustThresholds(rule: EntryRule, rng: () => number): void {
   const walk = (r: EntryRule) => {
     if (r.kind === "comparison") {
       const c = r as ConditionNode;
@@ -110,7 +122,7 @@ function adjustThresholds(rule: EntryRule): void {
         if ("value" in side && typeof (side as { type: string; value: number }).value === "number") {
           const lit = side as { type: string; value: number };
           const delta = Math.abs(lit.value) * 0.15;
-          lit.value += Math.random() > 0.5 ? delta : -delta;
+          lit.value += rng() > 0.5 ? delta : -delta;
         }
       }
     } else {
@@ -138,35 +150,32 @@ function swapIndicators(rule: EntryRule): void {
   walk(rule);
 }
 
-function adjustExits(spec: StrategySpec): void {
+function adjustExits(spec: StrategySpec, rng: () => number): void {
   const exits = spec.exitRules;
   if (exits.stopLossPercent) {
-    exits.stopLossPercent *= 0.8 + Math.random() * 0.4; // +/- 20%
-    exits.stopLossPercent = Math.max(0.01, Math.min(0.20, exits.stopLossPercent));
+    exits.stopLossPercent *= 0.8 + rng() * 0.4; // +/- 20%
+    exits.stopLossPercent = Math.max(0.01, Math.min(0.2, exits.stopLossPercent));
   }
   if (exits.takeProfitPercent) {
-    exits.takeProfitPercent *= 0.8 + Math.random() * 0.4;
-    exits.takeProfitPercent = Math.max(0.02, Math.min(0.50, exits.takeProfitPercent));
+    exits.takeProfitPercent *= 0.8 + rng() * 0.4;
+    exits.takeProfitPercent = Math.max(0.02, Math.min(0.5, exits.takeProfitPercent));
   }
   if (exits.trailingStopPercent) {
-    exits.trailingStopPercent *= 0.8 + Math.random() * 0.4;
+    exits.trailingStopPercent *= 0.8 + rng() * 0.4;
     exits.trailingStopPercent = Math.max(0.01, Math.min(0.15, exits.trailingStopPercent));
   }
 }
 
-function adjustSizing(spec: StrategySpec): void {
+function adjustSizing(spec: StrategySpec, rng: () => number): void {
   const sizing = spec.positionSizing;
-  sizing.basePercent *= 0.8 + Math.random() * 0.4;
+  sizing.basePercent *= 0.8 + rng() * 0.4;
   sizing.basePercent = Math.max(0.01, Math.min(sizing.maxPercent, sizing.basePercent));
 }
 
 /**
  * Combine two parent strategies into a child with AND logic
  */
-export function combineStrategies(
-  parent1: StrategySpec,
-  parent2: StrategySpec
-): StrategySpec {
+export function combineStrategies(parent1: StrategySpec, parent2: StrategySpec): StrategySpec {
   return {
     name: `${parent1.name} + ${parent2.name}`,
     description: `Combined strategy: ${parent1.description} AND ${parent2.description}`,
@@ -175,13 +184,10 @@ export function combineStrategies(
       conditions: [parent1.entryLong, parent2.entryLong],
     },
     exitRules: {
-      stopLossPercent: Math.min(
-        parent1.exitRules.stopLossPercent ?? 0.05,
-        parent2.exitRules.stopLossPercent ?? 0.05
-      ),
+      stopLossPercent: Math.min(parent1.exitRules.stopLossPercent ?? 0.05, parent2.exitRules.stopLossPercent ?? 0.05),
       takeProfitPercent: Math.max(
-        parent1.exitRules.takeProfitPercent ?? 0.10,
-        parent2.exitRules.takeProfitPercent ?? 0.10
+        parent1.exitRules.takeProfitPercent ?? 0.1,
+        parent2.exitRules.takeProfitPercent ?? 0.1,
       ),
       trailingStopPercent: parent1.exitRules.trailingStopPercent ?? parent2.exitRules.trailingStopPercent,
       timeStopDays: parent1.exitRules.timeStopDays ?? parent2.exitRules.timeStopDays,
@@ -199,11 +205,7 @@ export class EvolutionEngine {
   private dataManager: DataManager;
   private evolutionConfig: EvolutionConfig;
 
-  constructor(
-    store: StrategyStore,
-    dataManager: DataManager,
-    config?: Partial<EvolutionConfig>
-  ) {
+  constructor(store: StrategyStore, dataManager: DataManager, config?: Partial<EvolutionConfig>) {
     this.store = store;
     this.dataManager = dataManager;
     this.evolutionConfig = { ...DEFAULT_EVOLUTION_CONFIG, ...config };
@@ -235,10 +237,7 @@ export class EvolutionEngine {
   /**
    * Backtest a strategy and update its record with results
    */
-  async backtestStrategy(
-    strategyId: string,
-    symbols: string[]
-  ): Promise<StrategyRecord | null> {
+  async backtestStrategy(strategyId: string, symbols: string[]): Promise<StrategyRecord | null> {
     const record = this.store.get(strategyId);
     if (!record) return null;
 
@@ -264,11 +263,7 @@ export class EvolutionEngine {
   /**
    * Evolve a strategy: create mutated children, backtest, keep best
    */
-  async evolveStrategy(
-    parentId: string,
-    symbols: string[],
-    generations: number = 1
-  ): Promise<StrategyRecord[]> {
+  async evolveStrategy(parentId: string, symbols: string[], generations: number = 1): Promise<StrategyRecord[]> {
     const parent = this.store.get(parentId);
     if (!parent) throw new Error(`Strategy ${parentId} not found`);
 
@@ -316,7 +311,7 @@ export class EvolutionEngine {
             });
 
             children.push(this.store.get(childRecord.id)!);
-          } catch (error) {
+          } catch (_error) {
             // Skip failed backtests
             this.store.update(childRecord.id, { status: "retired" });
           }
@@ -325,7 +320,7 @@ export class EvolutionEngine {
 
       // Select survivors
       const ranked = children
-        .filter(c => c.score !== undefined)
+        .filter((c) => c.score !== undefined)
         .sort((a, b) => (b.score?.composite ?? 0) - (a.score?.composite ?? 0));
 
       currentParents = ranked.slice(0, this.evolutionConfig.survivorCount);

@@ -71,6 +71,6 @@ export interface Strategy {
   generateSignals(
     symbol: string,
     history: { timestamp: number; open: number; high: number; low: number; close: number; volume: number }[],
-    position: BacktestPosition | null
+    position: BacktestPosition | null,
   ): Signal;
 }

@@ -5,22 +5,27 @@
  */
 
 import { z } from "zod";
-import { MemoryStore } from "./store.js";
-import { MemoryEntry } from "./types.js";
+import type { MemoryStore } from "./store.js";
 
 const RecordInsightSchema = z.object({
-  type: z.enum(["insight", "strategy_learning", "trade_lesson", "market_observation", "regime_change"])
+  type: z
+    .enum(["insight", "strategy_learning", "trade_lesson", "market_observation", "regime_change"])
     .describe("Type of insight"),
   content: z.string().min(1).max(2000).describe("The insight content"),
   symbols: z.array(z.string()).default([]).describe("Related stock symbols"),
-  tags: z.array(z.string()).default([]).describe("Tags for categorization (e.g., 'technical', 'earnings', 'sector-rotation')"),
+  tags: z
+    .array(z.string())
+    .default([])
+    .describe("Tags for categorization (e.g., 'technical', 'earnings', 'sector-rotation')"),
   confidence: z.number().min(0).max(1).default(0.7).describe("Confidence in this insight (0-1)"),
 });
 
 const QueryMemoriesSchema = z.object({
   symbols: z.array(z.string()).optional().describe("Filter by symbols"),
   tags: z.array(z.string()).optional().describe("Filter by tags"),
-  types: z.array(z.enum(["insight", "strategy_learning", "trade_lesson", "market_observation", "regime_change"])).optional()
+  types: z
+    .array(z.enum(["insight", "strategy_learning", "trade_lesson", "market_observation", "regime_change"]))
+    .optional()
     .describe("Filter by entry type"),
   topic: z.string().optional().describe("Free-text search in content"),
   limit: z.number().int().min(1).max(50).optional().describe("Max results (default: 10)"),
@@ -31,7 +36,8 @@ export function createMemoryTools(deps: { memoryStore: MemoryStore }) {
 
   return {
     record_insight: {
-      description: "Record a market insight, strategy learning, or trade lesson for future reference across cycles. This builds persistent knowledge.",
+      description:
+        "Record a market insight, strategy learning, or trade lesson for future reference across cycles. This builds persistent knowledge.",
       inputSchema: RecordInsightSchema,
       handler: async (input: z.infer<typeof RecordInsightSchema>) => {
         const entry = memoryStore.add({
@@ -52,7 +58,8 @@ export function createMemoryTools(deps: { memoryStore: MemoryStore }) {
     },
 
     query_memories: {
-      description: "Search past insights and learnings by symbol, tags, type, or free-text topic. Returns relevant memories ranked by relevance.",
+      description:
+        "Search past insights and learnings by symbol, tags, type, or free-text topic. Returns relevant memories ranked by relevance.",
       inputSchema: QueryMemoriesSchema,
       handler: async (input: z.infer<typeof QueryMemoriesSchema>) => {
         const results = memoryStore.query({
@@ -66,7 +73,7 @@ export function createMemoryTools(deps: { memoryStore: MemoryStore }) {
         return {
           success: true,
           count: results.length,
-          memories: results.map(r => ({
+          memories: results.map((r) => ({
             id: r.entry.id,
             type: r.entry.type,
             content: r.entry.content,

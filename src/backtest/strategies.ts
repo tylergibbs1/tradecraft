@@ -1,4 +1,4 @@
-import { Strategy, Signal, BacktestPosition } from "./types.js";
+import type { BacktestPosition, Signal, Strategy } from "./types.js";
 
 interface Bar {
   timestamp: number;

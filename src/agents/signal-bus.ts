@@ -5,21 +5,21 @@
  * and a consensus aggregation system for the Portfolio Manager.
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 import {
-  AgentSignal,
-  SignalStrength,
-  ConsensusResult,
-  AgentRole,
-  AgentWeights,
+  type AgentRole,
+  type AgentSignal,
+  type AgentWeights,
+  type ConsensusResult,
   DEFAULT_AGENT_WEIGHTS,
-} from './types.js';
+  type SignalStrength,
+} from "./types.js";
 
 export interface SignalFilter {
   symbols?: string[];
   roles?: AgentRole[];
   minConfidence?: number;
-  maxAge?: number;  // Max age in milliseconds
+  maxAge?: number; // Max age in milliseconds
 }
 
 export interface SignalSubscription {
@@ -47,23 +47,23 @@ function signalToNumber(signal: SignalStrength): number {
  * Convert numeric value back to signal strength
  */
 function numberToSignal(value: number): SignalStrength {
-  if (value >= 1.5) return 'STRONG_BUY';
-  if (value >= 0.5) return 'BUY';
-  if (value <= -1.5) return 'STRONG_SELL';
-  if (value <= -0.5) return 'SELL';
-  return 'HOLD';
+  if (value >= 1.5) return "STRONG_BUY";
+  if (value >= 0.5) return "BUY";
+  if (value <= -1.5) return "STRONG_SELL";
+  if (value <= -0.5) return "SELL";
+  return "HOLD";
 }
 
 export class SignalBus {
-  private signals: Map<string, AgentSignal[]> = new Map();  // symbol -> signals
+  private signals: Map<string, AgentSignal[]> = new Map(); // symbol -> signals
   private allSignals: AgentSignal[] = [];
   private subscriptions: Map<string, SignalSubscription> = new Map();
   private weights: AgentWeights;
-  private maxSignalAge: number;  // Max age before signal considered stale (ms)
+  private maxSignalAge: number; // Max age before signal considered stale (ms)
 
   constructor(
     weights: AgentWeights = DEFAULT_AGENT_WEIGHTS,
-    maxSignalAge: number = 24 * 60 * 60 * 1000  // 24 hours default
+    maxSignalAge: number = 24 * 60 * 60 * 1000, // 24 hours default
   ) {
     this.weights = weights;
     this.maxSignalAge = maxSignalAge;
@@ -72,7 +72,7 @@ export class SignalBus {
   /**
    * Publish a signal to the bus
    */
-  publish(signal: Omit<AgentSignal, 'id' | 'timestamp'>): AgentSignal {
+  publish(signal: Omit<AgentSignal, "id" | "timestamp">): AgentSignal {
     const fullSignal: AgentSignal = {
       ...signal,
       id: uuidv4(),
@@ -96,11 +96,7 @@ export class SignalBus {
   /**
    * Subscribe to signals
    */
-  subscribe(
-    agentId: string,
-    callback: (signal: AgentSignal) => void,
-    filter?: SignalFilter
-  ): string {
+  subscribe(agentId: string, callback: (signal: AgentSignal) => void, filter?: SignalFilter): string {
     const subscription: SignalSubscription = {
       id: uuidv4(),
       agentId,
@@ -139,7 +135,7 @@ export class SignalBus {
    */
   getConsensus(symbol: string, customWeights?: Partial<AgentWeights>): ConsensusResult {
     const weights = { ...this.weights, ...customWeights };
-    const now = Date.now();
+    const _now = Date.now();
 
     // Get fresh signals for this symbol
     const signals = this.getSignals(symbol, {
@@ -152,7 +148,7 @@ export class SignalBus {
         weightedScore: 0,
         signalCount: 0,
         averageConfidence: 0,
-        recommendation: 'HOLD',
+        recommendation: "HOLD",
         positionSizeMultiplier: 0,
         signals: [],
         timestamp: new Date().toISOString(),
@@ -167,7 +163,7 @@ export class SignalBus {
 
     for (const signal of signals) {
       const role = signal.agentRole;
-      if (role === 'portfolio-manager') continue;  // PM doesn't vote
+      if (role === "portfolio-manager") continue; // PM doesn't vote
 
       const weight = weights[role as keyof AgentWeights] || 0.1;
       const numericSignal = signalToNumber(signal.signal);
@@ -193,7 +189,7 @@ export class SignalBus {
 
     // Position size multiplier based on consensus strength and confidence
     // Strong consensus with high confidence = larger position
-    const consensusStrength = Math.abs(weightedScore) / 2;  // 0-1 scale
+    const consensusStrength = Math.abs(weightedScore) / 2; // 0-1 scale
     const positionSizeMultiplier = Math.min(1, consensusStrength * averageConfidence);
 
     return {
@@ -225,25 +221,22 @@ export class SignalBus {
   /**
    * Get top recommendations (sorted by weighted score)
    */
-  getTopRecommendations(
-    limit: number = 10,
-    direction: 'buy' | 'sell' | 'both' = 'both'
-  ): ConsensusResult[] {
+  getTopRecommendations(limit: number = 10, direction: "buy" | "sell" | "both" = "both"): ConsensusResult[] {
     const allConsensus = Array.from(this.getAllConsensus().values());
 
     let filtered = allConsensus;
-    if (direction === 'buy') {
-      filtered = allConsensus.filter(c => c.weightedScore > 0);
-    } else if (direction === 'sell') {
-      filtered = allConsensus.filter(c => c.weightedScore < 0);
+    if (direction === "buy") {
+      filtered = allConsensus.filter((c) => c.weightedScore > 0);
+    } else if (direction === "sell") {
+      filtered = allConsensus.filter((c) => c.weightedScore < 0);
     }
 
     return filtered
       .sort((a, b) => {
-        if (direction === 'sell') {
-          return a.weightedScore - b.weightedScore;  // Most negative first
+        if (direction === "sell") {
+          return a.weightedScore - b.weightedScore; // Most negative first
         }
-        return b.weightedScore - a.weightedScore;  // Most positive first
+        return b.weightedScore - a.weightedScore; // Most positive first
       })
       .slice(0, limit);
   }
@@ -252,12 +245,12 @@ export class SignalBus {
    * Prune stale signals
    */
   pruneStale(maxAge?: number): number {
-    const cutoff = Date.now() - (maxAge || this.maxSignalAge);
+    const _cutoff = Date.now() - (maxAge || this.maxSignalAge);
     let pruned = 0;
 
     // Prune from symbol map
     for (const [symbol, signals] of this.signals.entries()) {
-      const fresh = signals.filter(s => {
+      const fresh = signals.filter((s) => {
         const age = Date.now() - new Date(s.timestamp).getTime();
         if (age > (maxAge || this.maxSignalAge)) {
           pruned++;
@@ -269,7 +262,7 @@ export class SignalBus {
     }
 
     // Prune from allSignals
-    this.allSignals = this.allSignals.filter(s => {
+    this.allSignals = this.allSignals.filter((s) => {
       const age = Date.now() - new Date(s.timestamp).getTime();
       return age <= (maxAge || this.maxSignalAge);
     });
@@ -318,7 +311,7 @@ export class SignalBus {
 
     const now = Date.now();
 
-    return signals.filter(signal => {
+    return signals.filter((signal) => {
       if (filter.symbols && !filter.symbols.includes(signal.symbol)) {
         return false;
       }

@@ -1,10 +1,9 @@
-import { v4 as uuidv4 } from "uuid";
 import Anthropic from "@anthropic-ai/sdk";
-import { DataManager, OHLCV, Quote } from "../data/index.js";
-import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
-import { RiskLimits } from "../config/schema.js";
-import { buildSystemPrompt, buildCyclePrompt } from "../agent/prompts.js";
-import { PortfolioState, Position, Order, Trade } from "../portfolio/types.js";
+import { buildCyclePrompt, buildSystemPrompt } from "../agent/prompts.js";
+import type { RiskLimits } from "../config/schema.js";
+import type { DataManager, OHLCV } from "../data/index.js";
+import type { PortfolioState, Position } from "../portfolio/types.js";
+import { type PortfolioSnapshot, RiskMonitor } from "../risk/monitor.js";
 import { getIndicatorSummary } from "./indicators.js";
 
 export interface AgentBacktestConfig {
@@ -66,7 +65,6 @@ export interface AgentBacktestResult {
 class SimulatedPortfolio {
   private cash: number;
   private positions: Map<string, Position> = new Map();
-  private trades: Trade[] = [];
   private peakEquity: number;
   private initialCapital: number;
 
@@ -192,7 +190,7 @@ class SimulatedPortfolio {
 }
 
 // Convert Zod schema to JSON Schema for Anthropic tools
-function zodToJsonSchema(schema: unknown): Anthropic.Tool.InputSchema {
+function _zodToJsonSchema(schema: unknown): Anthropic.Tool.InputSchema {
   const zodSchema = schema as { shape?: Record<string, unknown> };
   if (!zodSchema.shape) {
     return { type: "object", properties: {} };
@@ -215,7 +213,7 @@ function zodToJsonSchema(schema: unknown): Anthropic.Tool.InputSchema {
     if (!def) continue;
 
     let innerDef = def;
-    let isOptional = def.type === "optional";
+    const isOptional = def.type === "optional";
     if (isOptional && def.innerType?._def) {
       innerDef = def.innerType._def;
     }
@@ -267,19 +265,12 @@ export class AgentBacktestEngine {
     this.config = config;
   }
 
-  async run(
-    onProgress?: (message: string) => void
-  ): Promise<AgentBacktestResult> {
+  async run(onProgress?: (message: string) => void): Promise<AgentBacktestResult> {
     onProgress?.("Fetching historical data...");
 
     // Fetch all historical data upfront
     for (const symbol of this.config.symbols) {
-      const history = await this.dataManager.getHistory(
-        symbol,
-        "1d",
-        this.config.startDate,
-        this.config.endDate
-      );
+      const history = await this.dataManager.getHistory(symbol, "1d", this.config.startDate, this.config.endDate);
       this.historicalData.set(symbol, history);
 
       // Index by date for quick lookup
@@ -322,17 +313,12 @@ export class AgentBacktestEngine {
       equityCurve.push({ date, equity });
 
       // Run agent cycle
-      onProgress?.(`[${date}] Running cycle ${Math.floor(i / this.config.cycleFrequency) + 1}/${Math.ceil(tradingDays.length / this.config.cycleFrequency)}...`);
+      onProgress?.(
+        `[${date}] Running cycle ${Math.floor(i / this.config.cycleFrequency) + 1}/${Math.ceil(tradingDays.length / this.config.cycleFrequency)}...`,
+      );
 
       try {
-        const cycleResult = await this.runAgentCycle(
-          date,
-          portfolio,
-          riskMonitor,
-          prices,
-          currentPrices,
-          allTrades
-        );
+        const cycleResult = await this.runAgentCycle(date, portfolio, riskMonitor, prices, currentPrices, allTrades);
 
         cycles.push(cycleResult);
         totalTokens += cycleResult.tokens;
@@ -372,7 +358,7 @@ export class AgentBacktestEngine {
     riskMonitor: RiskMonitor,
     prices: Map<string, OHLCV>,
     currentPrices: Map<string, number>,
-    allTrades: AgentBacktestTrade[]
+    allTrades: AgentBacktestTrade[],
   ): Promise<AgentBacktestCycle> {
     const cycleTrades: AgentBacktestTrade[] = [];
     let turns = 0;
@@ -438,11 +424,16 @@ export class AgentBacktestEngine {
         const snapshot: PortfolioSnapshot = {
           cash: portfolio.getState(currentPrices).cash,
           equity: portfolio.getEquity(currentPrices),
-          positions: new Map(portfolio.getPositions().map(p => [p.symbol, {
-            quantity: p.quantity,
-            averageCost: p.averageCost,
-            currentPrice: currentPrices.get(p.symbol) ?? p.currentPrice,
-          }])),
+          positions: new Map(
+            portfolio.getPositions().map((p) => [
+              p.symbol,
+              {
+                quantity: p.quantity,
+                averageCost: p.averageCost,
+                currentPrice: currentPrices.get(p.symbol) ?? p.currentPrice,
+              },
+            ]),
+          ),
           dailyPnL: 0,
           weeklyPnL: 0,
           peakEquity: portfolio.getState(currentPrices).peakEquity,
@@ -516,7 +507,7 @@ export class AgentBacktestEngine {
         }
 
         // Filter to bars up to and including the current date
-        const currentDateMs = new Date(date + "T23:59:59Z").getTime();
+        const currentDateMs = new Date(`${date}T23:59:59Z`).getTime();
         const barsToDate = allBars.filter((b) => b.timestamp <= currentDateMs);
 
         if (barsToDate.length < 2) {
@@ -538,11 +529,16 @@ export class AgentBacktestEngine {
     const snapshot: PortfolioSnapshot = {
       cash: portfolioState.cash,
       equity: portfolioState.equity,
-      positions: new Map(portfolio.getPositions().map(p => [p.symbol, {
-        quantity: p.quantity,
-        averageCost: p.averageCost,
-        currentPrice: currentPrices.get(p.symbol) ?? p.currentPrice,
-      }])),
+      positions: new Map(
+        portfolio.getPositions().map((p) => [
+          p.symbol,
+          {
+            quantity: p.quantity,
+            averageCost: p.averageCost,
+            currentPrice: currentPrices.get(p.symbol) ?? p.currentPrice,
+          },
+        ]),
+      ),
       dailyPnL: 0,
       weeklyPnL: 0,
       peakEquity: portfolioState.peakEquity,
@@ -551,9 +547,7 @@ export class AgentBacktestEngine {
     const cyclePrompt = buildCyclePrompt(portfolioState, riskStatus, allTrades);
 
     // Run conversation
-    const messages: Anthropic.MessageParam[] = [
-      { role: "user", content: cyclePrompt },
-    ];
+    const messages: Anthropic.MessageParam[] = [{ role: "user", content: cyclePrompt }];
 
     while (turns < this.config.maxTurnsPerCycle) {
       turns++;
@@ -573,7 +567,7 @@ export class AgentBacktestEngine {
 
       for (const block of response.content) {
         if (block.type === "text") {
-          reasoning += block.text + "\n";
+          reasoning += `${block.text}\n`;
         } else if (block.type === "tool_use") {
           toolUses.push({
             id: block.id,
@@ -624,7 +618,7 @@ export class AgentBacktestEngine {
     trades: AgentBacktestTrade[],
     equityCurve: Array<{ date: string; equity: number }>,
     totalTokens: number,
-    totalApiCost: number
+    totalApiCost: number,
   ): AgentBacktestResult {
     const startEquity = this.config.initialCapital;
     const endEquity = portfolio.getEquity(finalPrices);
@@ -633,9 +627,7 @@ export class AgentBacktestEngine {
 
     const tradingDays = equityCurve.length;
     const yearsTraded = tradingDays / 252;
-    const annualizedReturn = yearsTraded > 0
-      ? Math.pow(endEquity / startEquity, 1 / yearsTraded) - 1
-      : 0;
+    const annualizedReturn = yearsTraded > 0 ? (endEquity / startEquity) ** (1 / yearsTraded) - 1 : 0;
 
     // Max drawdown
     let maxDrawdown = 0;
@@ -660,16 +652,15 @@ export class AgentBacktestEngine {
     }
 
     const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
-    const variance = returns.length > 0
-      ? returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
-      : 0;
+    const variance =
+      returns.length > 0 ? returns.reduce((sum, r) => sum + (r - avgReturn) ** 2, 0) / returns.length : 0;
     const stdDev = Math.sqrt(variance);
     const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev) * Math.sqrt(252) : 0;
 
     // Trade stats
-    const closingTrades = trades.filter(t => t.pnl !== undefined);
-    const winningTrades = closingTrades.filter(t => t.pnl! > 0);
-    const losingTrades = closingTrades.filter(t => t.pnl! < 0);
+    const closingTrades = trades.filter((t) => t.pnl !== undefined);
+    const winningTrades = closingTrades.filter((t) => t.pnl! > 0);
+    const losingTrades = closingTrades.filter((t) => t.pnl! < 0);
     const winRate = closingTrades.length > 0 ? winningTrades.length / closingTrades.length : 0;
 
     const totalWins = winningTrades.reduce((sum, t) => sum + t.pnl!, 0);

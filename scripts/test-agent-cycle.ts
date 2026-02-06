@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
+
 /**
  * Test a single agent cycle with Polygon tools
  */
 
+import { TradingAgent } from "../src/agent/index.js";
 import { loadConfig } from "../src/config/index.js";
+import { DataManager } from "../src/data/index.js";
 import { PortfolioManager } from "../src/portfolio/manager.js";
 import { RiskMonitor } from "../src/risk/monitor.js";
-import { DataManager } from "../src/data/index.js";
-import { TradingAgent } from "../src/agent/index.js";
 
 async function main() {
   console.log("🤖 Testing Agent Cycle with Polygon Integration\n");
@@ -34,13 +35,14 @@ async function main() {
     { config, portfolioManager, riskMonitor, dataManager },
     {
       onMessage: (msg) => {
-        const prefix = {
-          system: "🔧",
-          assistant: "🤖",
-          tool_call: "🔨",
-          tool_result: "📊",
-          error: "❌",
-        }[msg.type] || "📝";
+        const prefix =
+          {
+            system: "🔧",
+            assistant: "🤖",
+            tool_call: "🔨",
+            tool_result: "📊",
+            error: "❌",
+          }[msg.type] || "📝";
         console.log(`${prefix} [${msg.type}] ${msg.content.slice(0, 150)}${msg.content.length > 150 ? "..." : ""}`);
       },
       onCycleComplete: (result) => {
@@ -53,7 +55,7 @@ async function main() {
           console.log(`   Error: ${result.error}`);
         }
       },
-    }
+    },
   );
 
   // Run a single cycle

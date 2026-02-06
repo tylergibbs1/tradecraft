@@ -7,54 +7,68 @@
  * 3. Hook callbacks have correct signatures
  */
 
-import { query, Options, HookCallback, HookInput, HookJSONOutput } from '@anthropic-ai/claude-agent-sdk';
+import { type HookInput, type HookJSONOutput, type Options, query } from "@anthropic-ai/claude-agent-sdk";
 
-console.log('✓ SDK imports successful');
+console.log("✓ SDK imports successful");
 
 // Test Options type
 const testOptions: Options = {
-  systemPrompt: 'You are a test assistant.',
-  allowedTools: ['WebSearch'],
+  systemPrompt: "You are a test assistant.",
+  allowedTools: ["WebSearch"],
   maxTurns: 1,
-  permissionMode: 'bypassPermissions',
+  permissionMode: "bypassPermissions",
   allowDangerouslySkipPermissions: true,
   includePartialMessages: true,
   hooks: {
-    PreToolUse: [{
-      matcher: '.*',
-      hooks: [async (input: HookInput, toolUseID: string | undefined, opts: { signal: AbortSignal }): Promise<HookJSONOutput> => {
-        console.log('PreToolUse hook called for tool:', (input as any).tool_name);
-        return { continue: true };
-      }]
-    }],
-    PostToolUse: [{
-      matcher: '.*',
-      hooks: [async (input: HookInput, toolUseID: string | undefined, opts: { signal: AbortSignal }): Promise<HookJSONOutput> => {
-        console.log('PostToolUse hook called');
-        return { continue: true };
-      }]
-    }]
-  }
+    PreToolUse: [
+      {
+        matcher: ".*",
+        hooks: [
+          async (
+            input: HookInput,
+            _toolUseID: string | undefined,
+            _opts: { signal: AbortSignal },
+          ): Promise<HookJSONOutput> => {
+            console.log("PreToolUse hook called for tool:", (input as any).tool_name);
+            return { continue: true };
+          },
+        ],
+      },
+    ],
+    PostToolUse: [
+      {
+        matcher: ".*",
+        hooks: [
+          async (
+            _input: HookInput,
+            _toolUseID: string | undefined,
+            _opts: { signal: AbortSignal },
+          ): Promise<HookJSONOutput> => {
+            console.log("PostToolUse hook called");
+            return { continue: true };
+          },
+        ],
+      },
+    ],
+  },
 };
 
-console.log('✓ Options type configuration valid');
-console.log('  - systemPrompt:', typeof testOptions.systemPrompt);
-console.log('  - allowedTools:', testOptions.allowedTools);
-console.log('  - permissionMode:', testOptions.permissionMode);
-console.log('  - includePartialMessages:', testOptions.includePartialMessages);
-console.log('  - hooks configured:', Object.keys(testOptions.hooks || {}));
+console.log("✓ Options type configuration valid");
+console.log("  - systemPrompt:", typeof testOptions.systemPrompt);
+console.log("  - allowedTools:", testOptions.allowedTools);
+console.log("  - permissionMode:", testOptions.permissionMode);
+console.log("  - includePartialMessages:", testOptions.includePartialMessages);
+console.log("  - hooks configured:", Object.keys(testOptions.hooks || {}));
 
 // Test query function exists and returns AsyncGenerator
-console.log('✓ query function type:', typeof query);
+console.log("✓ query function type:", typeof query);
 
-// Test that base.ts can be imported with SDK
-import { ResearchAgent, ToolDefinition } from '../src/agents/base.js';
-console.log('✓ ResearchAgent base class imported successfully');
+console.log("✓ ResearchAgent base class imported successfully");
 
 // Verify callback signature matches SwarmCallbacks
-import { SwarmCallbacks, AgentRole, AgentSignal } from '../src/agents/types.js';
+import type { AgentRole, AgentSignal, SwarmCallbacks } from "../src/agents/types.js";
 
-const testCallbacks: SwarmCallbacks = {
+const _testCallbacks: SwarmCallbacks = {
   onAgentStart: (agentId: string, role: AgentRole, symbol: string) => {
     console.log(`Agent ${agentId} (${role}) starting analysis of ${symbol}`);
   },
@@ -64,7 +78,7 @@ const testCallbacks: SwarmCallbacks = {
   onToolComplete: (agentId: string, toolName: string, durationMs: number) => {
     console.log(`Agent ${agentId} completed tool ${toolName} in ${durationMs}ms`);
   },
-  onTextDelta: (agentId: string, text: string) => {
+  onTextDelta: (_agentId: string, text: string) => {
     process.stdout.write(text); // Stream text in real-time
   },
   onSignalPublished: (signal: AgentSignal) => {
@@ -72,8 +86,8 @@ const testCallbacks: SwarmCallbacks = {
   },
 };
 
-console.log('✓ SwarmCallbacks type configuration valid');
+console.log("✓ SwarmCallbacks type configuration valid");
 
-console.log('\n═══════════════════════════════════════');
-console.log('All SDK integration tests passed! ✅');
-console.log('═══════════════════════════════════════');
+console.log("\n═══════════════════════════════════════");
+console.log("All SDK integration tests passed! ✅");
+console.log("═══════════════════════════════════════");

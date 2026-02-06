@@ -1,12 +1,6 @@
-import { OrderSide, OrderType } from "../risk/types.js";
+import type { OrderSide, OrderType } from "../risk/types.js";
 
-export type OrderStatus =
-  | "pending"
-  | "submitted"
-  | "partial"
-  | "filled"
-  | "rejected"
-  | "cancelled";
+export type OrderStatus = "pending" | "submitted" | "partial" | "filled" | "rejected" | "cancelled";
 
 export interface Order {
   id: string;

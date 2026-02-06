@@ -1,14 +1,41 @@
-import { DataProviderInterface, Quote, OHLCV, TimeFrame } from "../../types.js";
+import type { DataProviderInterface, OHLCV, Quote, TimeFrame } from "../../types.js";
 
 const POLYGON_BASE = "https://api.polygon.io";
 
 export type IndicatorTimespan = "minute" | "hour" | "day" | "week" | "month" | "quarter" | "year";
 
-export type TickerType = "CS" | "ADRC" | "ADRP" | "ADRR" | "ADRW" | "AGEN" | "BASKET" | "BOND" | "ETF" | "ETN" | "ETS" | "ETV" | "FUND" | "GDR" | "LT" | "NYRS" | "OS" | "OTHER" | "PFD" | "RIGHT" | "SP" | "UNIT" | "WARRANT";
+export type TickerType =
+  | "CS"
+  | "ADRC"
+  | "ADRP"
+  | "ADRR"
+  | "ADRW"
+  | "AGEN"
+  | "BASKET"
+  | "BOND"
+  | "ETF"
+  | "ETN"
+  | "ETS"
+  | "ETV"
+  | "FUND"
+  | "GDR"
+  | "LT"
+  | "NYRS"
+  | "OS"
+  | "OTHER"
+  | "PFD"
+  | "RIGHT"
+  | "SP"
+  | "UNIT"
+  | "WARRANT";
 
 // --- Helpers ---
 
-async function polygonFetch(path: string, apiKey: string, params?: Record<string, string | number | boolean | undefined>): Promise<any> {
+async function polygonFetch(
+  path: string,
+  apiKey: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<any> {
   const url = new URL(path, POLYGON_BASE);
   url.searchParams.set("apiKey", apiKey);
   if (params) {
@@ -52,10 +79,7 @@ export class PolygonQuotesProvider implements DataProviderInterface {
   async getQuote(symbol: string): Promise<Quote> {
     // Use snapshot endpoint (available on free tier) with previous-close fallback
     try {
-      const snap = await polygonFetch(
-        `/v2/snapshot/locale/us/markets/stocks/tickers/${symbol}`,
-        this.apiKey
-      );
+      const snap = await polygonFetch(`/v2/snapshot/locale/us/markets/stocks/tickers/${symbol}`, this.apiKey);
       const t = snap?.ticker;
       if (t) {
         return {
@@ -86,12 +110,7 @@ export class PolygonQuotesProvider implements DataProviderInterface {
     };
   }
 
-  async getHistory(
-    symbol: string,
-    timeframe: TimeFrame,
-    startDate: Date,
-    endDate: Date
-  ): Promise<OHLCV[]> {
+  async getHistory(symbol: string, timeframe: TimeFrame, startDate: Date, endDate: Date): Promise<OHLCV[]> {
     const tf = TIMEFRAME_MAP[timeframe] ?? { multiplier: 1, timespan: "day" };
     const from = formatDate(startDate);
     const to = formatDate(endDate);
@@ -99,7 +118,7 @@ export class PolygonQuotesProvider implements DataProviderInterface {
     const json = await polygonFetch(
       `/v2/aggs/ticker/${symbol}/range/${tf.multiplier}/${tf.timespan}/${from}/${to}`,
       this.apiKey,
-      { adjusted: true, sort: "asc", limit: 50000 }
+      { adjusted: true, sort: "asc", limit: 50000 },
     );
 
     if (!json.results || json.results.length === 0) {
@@ -161,7 +180,7 @@ export class PolygonNewsProvider {
 
   async getNews(
     symbol: string,
-    options: { limit?: number; publishedAfter?: Date } = {}
+    options: { limit?: number; publishedAfter?: Date } = {},
   ): Promise<PolygonNewsArticle[]> {
     const params: Record<string, string | number | boolean | undefined> = {
       ticker: symbol.toUpperCase(),
@@ -194,7 +213,7 @@ export class PolygonNewsProvider {
 
   async getSentimentSummary(
     symbol: string,
-    options: { limit?: number; daysBack?: number } = {}
+    options: { limit?: number; daysBack?: number } = {},
   ): Promise<PolygonNewsSentimentSummary> {
     const daysBack = options.daysBack ?? 7;
     const publishedAfter = new Date();
@@ -210,9 +229,7 @@ export class PolygonNewsProvider {
     let scored = 0;
 
     for (const article of articles) {
-      const insight = article.insights.find(
-        (i) => i.ticker.toUpperCase() === symbol.toUpperCase()
-      );
+      const insight = article.insights.find((i) => i.ticker.toUpperCase() === symbol.toUpperCase());
       if (insight?.sentiment) {
         breakdown[insight.sentiment] = (breakdown[insight.sentiment] ?? 0) + 1;
         const s = insight.sentiment === "positive" ? 1 : insight.sentiment === "negative" ? -1 : 0;
@@ -266,17 +283,20 @@ export class PolygonIndicatorsProvider {
 
   async getSMA(
     symbol: string,
-    options: { window?: number; timespan?: IndicatorTimespan; limit?: number } = {}
+    options: { window?: number; timespan?: IndicatorTimespan; limit?: number } = {},
   ): Promise<IndicatorResult> {
     const window = options.window ?? 50;
     const timespan = options.timespan ?? "day";
     const limit = options.limit ?? 100;
 
-    const json = await polygonFetch(
-      `/v1/indicators/sma/${symbol.toUpperCase()}`,
-      this.apiKey,
-      { timespan, window, limit, "adjusted": true, "order": "desc", "series_type": "close" }
-    );
+    const json = await polygonFetch(`/v1/indicators/sma/${symbol.toUpperCase()}`, this.apiKey, {
+      timespan,
+      window,
+      limit,
+      adjusted: true,
+      order: "desc",
+      series_type: "close",
+    });
 
     return {
       ticker: symbol.toUpperCase(),
@@ -291,17 +311,20 @@ export class PolygonIndicatorsProvider {
 
   async getEMA(
     symbol: string,
-    options: { window?: number; timespan?: IndicatorTimespan; limit?: number } = {}
+    options: { window?: number; timespan?: IndicatorTimespan; limit?: number } = {},
   ): Promise<IndicatorResult> {
     const window = options.window ?? 50;
     const timespan = options.timespan ?? "day";
     const limit = options.limit ?? 100;
 
-    const json = await polygonFetch(
-      `/v1/indicators/ema/${symbol.toUpperCase()}`,
-      this.apiKey,
-      { timespan, window, limit, "adjusted": true, "order": "desc", "series_type": "close" }
-    );
+    const json = await polygonFetch(`/v1/indicators/ema/${symbol.toUpperCase()}`, this.apiKey, {
+      timespan,
+      window,
+      limit,
+      adjusted: true,
+      order: "desc",
+      series_type: "close",
+    });
 
     return {
       ticker: symbol.toUpperCase(),
@@ -316,17 +339,20 @@ export class PolygonIndicatorsProvider {
 
   async getRSI(
     symbol: string,
-    options: { window?: number; timespan?: IndicatorTimespan; limit?: number } = {}
+    options: { window?: number; timespan?: IndicatorTimespan; limit?: number } = {},
   ): Promise<IndicatorResult> {
     const window = options.window ?? 14;
     const timespan = options.timespan ?? "day";
     const limit = options.limit ?? 100;
 
-    const json = await polygonFetch(
-      `/v1/indicators/rsi/${symbol.toUpperCase()}`,
-      this.apiKey,
-      { timespan, window, limit, "adjusted": true, "order": "desc", "series_type": "close" }
-    );
+    const json = await polygonFetch(`/v1/indicators/rsi/${symbol.toUpperCase()}`, this.apiKey, {
+      timespan,
+      window,
+      limit,
+      adjusted: true,
+      order: "desc",
+      series_type: "close",
+    });
 
     return {
       ticker: symbol.toUpperCase(),
@@ -347,25 +373,21 @@ export class PolygonIndicatorsProvider {
       signalWindow?: number;
       timespan?: IndicatorTimespan;
       limit?: number;
-    } = {}
+    } = {},
   ): Promise<MACDResult> {
     const timespan = options.timespan ?? "day";
     const limit = options.limit ?? 100;
 
-    const json = await polygonFetch(
-      `/v1/indicators/macd/${symbol.toUpperCase()}`,
-      this.apiKey,
-      {
-        timespan,
-        limit,
-        short_window: options.shortWindow ?? 12,
-        long_window: options.longWindow ?? 26,
-        signal_window: options.signalWindow ?? 9,
-        adjusted: true,
-        order: "desc",
-        series_type: "close",
-      }
-    );
+    const json = await polygonFetch(`/v1/indicators/macd/${symbol.toUpperCase()}`, this.apiKey, {
+      timespan,
+      limit,
+      short_window: options.shortWindow ?? 12,
+      long_window: options.longWindow ?? 26,
+      signal_window: options.signalWindow ?? 9,
+      adjusted: true,
+      order: "desc",
+      series_type: "close",
+    });
 
     return {
       ticker: symbol.toUpperCase(),
@@ -426,10 +448,7 @@ export class PolygonTickersProvider {
 
   async getTickerDetails(symbol: string): Promise<TickerDetails | null> {
     try {
-      const json = await polygonFetch(
-        `/v3/reference/tickers/${symbol.toUpperCase()}`,
-        this.apiKey
-      );
+      const json = await polygonFetch(`/v3/reference/tickers/${symbol.toUpperCase()}`, this.apiKey);
       const r = json.results;
       if (!r) return null;
 
@@ -464,9 +483,7 @@ export class PolygonTickersProvider {
     }
   }
 
-  async getTickerDetailsBatch(
-    symbols: string[]
-  ): Promise<Map<string, TickerDetails>> {
+  async getTickerDetailsBatch(symbols: string[]): Promise<Map<string, TickerDetails>> {
     const results = new Map<string, TickerDetails>();
     const fetches = symbols.map(async (s) => {
       const d = await this.getTickerDetails(s);
@@ -509,10 +526,7 @@ export class PolygonTickersProvider {
     }));
   }
 
-  async searchByName(
-    query: string,
-    options: { limit?: number } = {}
-  ): Promise<TickerSearchResult[]> {
+  async searchByName(query: string, options: { limit?: number } = {}): Promise<TickerSearchResult[]> {
     return this.searchTickers({
       search: query,
       market: "stocks",

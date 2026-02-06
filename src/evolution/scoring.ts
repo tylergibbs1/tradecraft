@@ -5,13 +5,13 @@
  * Weights: Sharpe 0.30, return 0.20, drawdown 0.20, win rate 0.15, profit factor 0.15
  */
 
-import { BacktestResult } from "../backtest/types.js";
-import { StrategyScore, StrategyBacktestSummary } from "./types.js";
+import type { BacktestResult } from "../backtest/types.js";
+import type { StrategyBacktestSummary, StrategyScore } from "./types.js";
 
 const WEIGHTS = {
-  sharpe: 0.30,
-  totalReturn: 0.20,
-  maxDrawdown: 0.20,
+  sharpe: 0.3,
+  totalReturn: 0.2,
+  maxDrawdown: 0.2,
   winRate: 0.15,
   profitFactor: 0.15,
 };
@@ -32,13 +32,13 @@ export function scoreBacktestResult(result: BacktestResult): StrategyScore {
   const sharpeNorm = normalize(result.sharpeRatio, 1.0, 1.5);
 
   // Total return: 0% is neutral, 20%+ is excellent
-  const returnNorm = normalize(result.totalReturnPercent, 0.10, 5);
+  const returnNorm = normalize(result.totalReturnPercent, 0.1, 5);
 
   // Max drawdown: lower is better (invert), 5% is great, 30% is bad
   const drawdownNorm = 1 - normalize(result.maxDrawdown, 0.15, 8);
 
   // Win rate: 50% is neutral, 60%+ is good
-  const winRateNorm = normalize(result.winRate, 0.50, 5);
+  const winRateNorm = normalize(result.winRate, 0.5, 5);
 
   // Profit factor: 1.0 is break-even, 2+ is excellent
   const pfRaw = result.profitFactor === Infinity ? 5 : result.profitFactor;

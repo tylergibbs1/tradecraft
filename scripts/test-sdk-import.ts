@@ -1,8 +1,8 @@
 import { SdkTradingAgent } from "../src/agent/sdk-trading-agent.js";
+import { defaultConfig } from "../src/config/schema.js";
+import { DataManager } from "../src/data/index.js";
 import { PortfolioManager } from "../src/portfolio/manager.js";
 import { RiskMonitor } from "../src/risk/monitor.js";
-import { DataManager } from "../src/data/index.js";
-import { defaultConfig } from "../src/config/schema.js";
 
 // Minimal construction smoke test: instantiate SDK agent without running cycles.
 // This should not perform any network calls or file I/O beyond imports.
@@ -24,8 +24,7 @@ const agent = new SdkTradingAgent(
         console.error("[ERR]", msg.content);
       }
     },
-  }
+  },
 );
 
 console.log("SdkTradingAgent constructed. State:", agent.getState());
-

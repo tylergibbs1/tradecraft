@@ -1,15 +1,15 @@
 #!/usr/bin/env bun
+import { TradingAgent } from "./agent/index.js";
+import { SwarmTradingAgent } from "./agent/swarm-adapter.js";
+import type { ITradingAgent } from "./agent/types.js";
 /**
  * CLI interface for Tradecraft - works without TTY
  * Usage: bun run cli <command> [options]
  */
-import { loadConfig, configExists } from "./config/index.js";
+import { configExists, loadConfig } from "./config/index.js";
+import { DataManager } from "./data/index.js";
 import { PortfolioManager } from "./portfolio/manager.js";
 import { RiskMonitor } from "./risk/monitor.js";
-import { DataManager } from "./data/index.js";
-import { TradingAgent } from "./agent/index.js";
-import { ITradingAgent } from "./agent/types.js";
-import { SwarmTradingAgent } from "./agent/swarm-adapter.js";
 
 const HELP = `
 Tradecraft CLI - Autonomous Trading System
@@ -66,10 +66,11 @@ async function main() {
       await showStatus(portfolioManager, dataManager);
       break;
 
-    case "quotes":
+    case "quotes": {
       const symbols = args[1]?.split(",") || config.tradingUniverse.symbols;
       await showQuotes(dataManager, symbols);
       break;
+    }
 
     case "risk":
       await showRiskStatus(portfolioManager, riskMonitor, dataManager);
@@ -83,7 +84,7 @@ async function main() {
       await startAgent(config, portfolioManager, riskMonitor, dataManager);
       break;
 
-    case "order":
+    case "order": {
       const side = args[1]?.toLowerCase() as "buy" | "sell";
       const symbol = args[2]?.toUpperCase();
       const quantity = parseInt(args[3] || "0", 10);
@@ -93,6 +94,7 @@ async function main() {
       }
       await placeOrder(portfolioManager, riskMonitor, dataManager, config, side, symbol, quantity);
       break;
+    }
 
     case "history":
       showHistory(portfolioManager);
@@ -112,21 +114,21 @@ async function main() {
 
 function formatCurrency(value: number): string {
   const sign = value >= 0 ? "" : "-";
-  return sign + "$" + Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${sign}$${Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatPercent(value: number): string {
   const sign = value >= 0 ? "+" : "";
-  return sign + (value * 100).toFixed(2) + "%";
+  return `${sign + (value * 100).toFixed(2)}%`;
 }
 
 async function showStatus(portfolioManager: PortfolioManager, dataManager: DataManager) {
-  const state = portfolioManager.getState();
+  const _state = portfolioManager.getState();
   const positions = portfolioManager.getPositions();
 
   // Update prices
   if (positions.length > 0) {
-    const quotes = await dataManager.getQuotes(positions.map(p => p.symbol));
+    const quotes = await dataManager.getQuotes(positions.map((p) => p.symbol));
     portfolioManager.updatePrices(quotes);
   }
 
@@ -155,10 +157,10 @@ async function showStatus(portfolioManager: PortfolioManager, dataManager: DataM
     for (const pos of portfolioManager.getPositions()) {
       console.log(
         `  ${pos.symbol.padEnd(8)} ${pos.quantity.toString().padStart(4)}  ` +
-        `${formatCurrency(pos.averageCost).padStart(10)}  ` +
-        `${formatCurrency(pos.currentPrice).padStart(10)}  ` +
-        `${formatCurrency(pos.marketValue).padStart(10)}  ` +
-        `${formatCurrency(pos.unrealizedPnL).padStart(10)}`
+          `${formatCurrency(pos.averageCost).padStart(10)}  ` +
+          `${formatCurrency(pos.currentPrice).padStart(10)}  ` +
+          `${formatCurrency(pos.marketValue).padStart(10)}  ` +
+          `${formatCurrency(pos.unrealizedPnL).padStart(10)}`,
       );
     }
   }
@@ -168,7 +170,9 @@ async function showStatus(portfolioManager: PortfolioManager, dataManager: DataM
     console.log("\nOpen Orders:");
     console.log("─".repeat(50));
     for (const order of openOrders) {
-      console.log(`  ${order.side.toUpperCase()} ${order.quantity} ${order.symbol} @ ${order.price || 'MKT'} [${order.status}]`);
+      console.log(
+        `  ${order.side.toUpperCase()} ${order.quantity} ${order.symbol} @ ${order.price || "MKT"} [${order.status}]`,
+      );
     }
   }
 
@@ -188,23 +192,17 @@ async function showQuotes(dataManager: DataManager, symbols: string[]) {
     const time = new Date(quote.timestamp).toLocaleTimeString();
     console.log(
       `${symbol.padEnd(10)} ` +
-      `${formatCurrency(quote.last).padStart(10)}  ` +
-      `${quote.volume.toLocaleString().padStart(12)}  ` +
-      `${time}`
+        `${formatCurrency(quote.last).padStart(10)}  ` +
+        `${quote.volume.toLocaleString().padStart(12)}  ` +
+        `${time}`,
     );
   }
   console.log("");
 }
 
-async function showRiskStatus(
-  portfolioManager: PortfolioManager,
-  riskMonitor: RiskMonitor,
-  dataManager: DataManager
-) {
+async function showRiskStatus(portfolioManager: PortfolioManager, riskMonitor: RiskMonitor, dataManager: DataManager) {
   const positions = portfolioManager.getPositions();
-  const quotes = positions.length > 0
-    ? await dataManager.getQuotes(positions.map(p => p.symbol))
-    : new Map();
+  const quotes = positions.length > 0 ? await dataManager.getQuotes(positions.map((p) => p.symbol)) : new Map();
 
   // Build snapshot
   const state = portfolioManager.getState();
@@ -242,8 +240,12 @@ async function showRiskStatus(
 
   console.log("\nCurrent Metrics:");
   console.log("─".repeat(50));
-  console.log(`  Daily P&L:      ${formatCurrency(status.dailyPnL)} (${formatPercent(state.equity > 0 ? status.dailyPnL / state.equity : 0)})`);
-  console.log(`  Weekly P&L:     ${formatCurrency(status.weeklyPnL)} (${formatPercent(state.equity > 0 ? status.weeklyPnL / state.equity : 0)})`);
+  console.log(
+    `  Daily P&L:      ${formatCurrency(status.dailyPnL)} (${formatPercent(state.equity > 0 ? status.dailyPnL / state.equity : 0)})`,
+  );
+  console.log(
+    `  Weekly P&L:     ${formatCurrency(status.weeklyPnL)} (${formatPercent(state.equity > 0 ? status.weeklyPnL / state.equity : 0)})`,
+  );
   console.log(`  Drawdown:       ${formatPercent(status.currentDrawdown)}`);
   console.log(`  Positions:      ${status.positionCount}/${status.maxPositionCount}`);
 
@@ -267,7 +269,7 @@ function createAgent(
     onStateChange?: (state: import("./agent/types.js").AgentState) => void;
     onMessage?: (message: import("./agent/types.js").AgentMessage) => void;
     onCycleComplete?: (result: import("./agent/types.js").AgentCycleResult) => void;
-  }
+  },
 ): ITradingAgent {
   const deps = { config, portfolioManager, riskMonitor, dataManager };
   if (config.agentMode === "swarm") {
@@ -280,7 +282,7 @@ async function runCycle(
   config: ReturnType<typeof loadConfig>,
   portfolioManager: PortfolioManager,
   riskMonitor: RiskMonitor,
-  dataManager: DataManager
+  dataManager: DataManager,
 ) {
   console.log("\n╔════════════════════════════════════════════════════════════╗");
   console.log("║                 RUNNING TRADING CYCLE                      ║");
@@ -290,16 +292,17 @@ async function runCycle(
 
   const agent = createAgent(config, portfolioManager, riskMonitor, dataManager, {
     onMessage: (msg) => {
-      const prefix = {
-        system: "[SYS]",
-        assistant: "[AGT]",
-        tool_use: "[TUL]",
-        tool_result: "[RES]",
-        error: "[ERR]",
-        user: "[USR]",
-      }[msg.type] || "[???]";
+      const prefix =
+        {
+          system: "[SYS]",
+          assistant: "[AGT]",
+          tool_use: "[TUL]",
+          tool_result: "[RES]",
+          error: "[ERR]",
+          user: "[USR]",
+        }[msg.type] || "[???]";
 
-      const content = msg.content.length > 120 ? msg.content.slice(0, 120) + "..." : msg.content;
+      const content = msg.content.length > 120 ? `${msg.content.slice(0, 120)}...` : msg.content;
       console.log(`${prefix} ${content}`);
     },
   });
@@ -307,7 +310,7 @@ async function runCycle(
   console.log("Starting cycle...\n");
   const result = await agent.runSingleCycle();
 
-  console.log("\n" + "─".repeat(50));
+  console.log(`\n${"─".repeat(50)}`);
   console.log("Cycle Complete:");
   console.log(`  Turns:   ${result.turnsUsed}`);
   console.log(`  Tokens:  ${result.tokensUsed}`);
@@ -326,7 +329,7 @@ async function startAgent(
   config: ReturnType<typeof loadConfig>,
   portfolioManager: PortfolioManager,
   riskMonitor: RiskMonitor,
-  dataManager: DataManager
+  dataManager: DataManager,
 ) {
   console.log("\n╔════════════════════════════════════════════════════════════╗");
   console.log("║              STARTING AUTONOMOUS AGENT                     ║");
@@ -345,20 +348,23 @@ async function startAgent(
       console.log(`\n[STATE] Agent state: ${state.toUpperCase()}`);
     },
     onMessage: (msg) => {
-      const prefix = {
-        system: "[SYS]",
-        assistant: "[AGT]",
-        tool_use: "[TUL]",
-        tool_result: "[RES]",
-        error: "[ERR]",
-        user: "[USR]",
-      }[msg.type] || "[???]";
+      const prefix =
+        {
+          system: "[SYS]",
+          assistant: "[AGT]",
+          tool_use: "[TUL]",
+          tool_result: "[RES]",
+          error: "[ERR]",
+          user: "[USR]",
+        }[msg.type] || "[???]";
 
-      const content = msg.content.length > 100 ? msg.content.slice(0, 100) + "..." : msg.content;
+      const content = msg.content.length > 100 ? `${msg.content.slice(0, 100)}...` : msg.content;
       console.log(`${prefix} ${content}`);
     },
     onCycleComplete: (result) => {
-      console.log(`\n[CYCLE] Complete: ${result.turnsUsed} turns, ${result.ordersPlaced} orders, $${result.costUsd.toFixed(4)}`);
+      console.log(
+        `\n[CYCLE] Complete: ${result.turnsUsed} turns, ${result.ordersPlaced} orders, $${result.costUsd.toFixed(4)}`,
+      );
       console.log("─".repeat(60));
     },
   });
@@ -383,7 +389,7 @@ async function placeOrder(
   config: ReturnType<typeof loadConfig>,
   side: "buy" | "sell",
   symbol: string,
-  quantity: number
+  quantity: number,
 ) {
   // Check if symbol is in trading universe
   if (!config.tradingUniverse.symbols.includes(symbol)) {
@@ -398,7 +404,7 @@ async function placeOrder(
 
   // Validate against risk
   const positions = portfolioManager.getPositions();
-  const quotes = await dataManager.getQuotes(positions.map(p => p.symbol));
+  const quotes = await dataManager.getQuotes(positions.map((p) => p.symbol));
   portfolioManager.updatePrices(quotes);
 
   const state = portfolioManager.getState();
@@ -421,11 +427,7 @@ async function placeOrder(
     peakEquity: state.peakEquity,
   };
 
-  const validation = riskMonitor.preValidate(
-    { symbol, side, type: "market", quantity },
-    snapshot,
-    quote.last
-  );
+  const validation = riskMonitor.preValidate({ symbol, side, type: "market", quantity }, snapshot, quote.last);
 
   if (!validation.valid) {
     console.error(`\n✗ Order rejected: ${validation.reason}`);
@@ -474,12 +476,12 @@ function showHistory(portfolioManager: PortfolioManager) {
     const pnl = trade.pnl !== undefined ? formatCurrency(trade.pnl) : "N/A";
     console.log(
       `${time.padEnd(12)} ` +
-      `${trade.side.toUpperCase().padEnd(6)} ` +
-      `${trade.symbol.padEnd(8)} ` +
-      `${trade.quantity.toString().padStart(4)}  ` +
-      `${formatCurrency(trade.price).padStart(10)}  ` +
-      `${formatCurrency(trade.value).padStart(10)}  ` +
-      `${pnl.padStart(10)}`
+        `${trade.side.toUpperCase().padEnd(6)} ` +
+        `${trade.symbol.padEnd(8)} ` +
+        `${trade.quantity.toString().padStart(4)}  ` +
+        `${formatCurrency(trade.price).padStart(10)}  ` +
+        `${formatCurrency(trade.value).padStart(10)}  ` +
+        `${pnl.padStart(10)}`,
     );
   }
   console.log("");

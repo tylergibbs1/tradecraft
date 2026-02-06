@@ -1,16 +1,16 @@
-import { v4 as uuidv4 } from "uuid";
 import Anthropic from "@anthropic-ai/sdk";
-import { Config } from "../config/index.js";
-import { PortfolioManager } from "../portfolio/manager.js";
-import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
-import { DataManager } from "../data/index.js";
-import { createTradingTools, TradingMCPServerDeps } from "./mcp-server.js";
-import { createCanUseTool } from "./permissions.js";
+import { v4 as uuidv4 } from "uuid";
+import type { Config } from "../config/index.js";
+import type { DataManager } from "../data/index.js";
+import { createEvolutionTools, EvolutionEngine, StrategyStore } from "../evolution/index.js";
+import { createMemoryTools, MemoryStore } from "../memory/index.js";
+import type { PortfolioManager } from "../portfolio/manager.js";
+import type { PortfolioSnapshot, RiskMonitor } from "../risk/monitor.js";
 import { AgentLogger, createHooks } from "./hooks.js";
-import { buildSystemPrompt, buildCyclePrompt } from "./prompts.js";
-import { AgentState, AgentMessage, AgentCycleResult, AgentConfig } from "./types.js";
-import { StrategyStore, EvolutionEngine, createEvolutionTools } from "../evolution/index.js";
-import { MemoryStore, createMemoryTools } from "../memory/index.js";
+import { createTradingTools, type TradingMCPServerDeps } from "./mcp-server.js";
+import { createCanUseTool } from "./permissions.js";
+import { buildCyclePrompt, buildSystemPrompt } from "./prompts.js";
+import type { AgentConfig, AgentCycleResult, AgentMessage, AgentState } from "./types.js";
 
 export * from "./types.js";
 
@@ -42,7 +42,7 @@ function zodToJsonSchema(schema: unknown): Anthropic.Tool.InputSchema {
 
     // Handle optional wrapper (Zod 4 uses type: "optional")
     let innerDef = def;
-    let isOptional = def.type === "optional";
+    const isOptional = def.type === "optional";
     if (isOptional && def.innerType?._def) {
       innerDef = def.innerType._def;
     }
@@ -61,7 +61,7 @@ function zodToJsonSchema(schema: unknown): Anthropic.Tool.InputSchema {
       const itemType = innerDef.element?.type;
       prop = {
         type: "array",
-        items: { type: itemType === "number" ? "number" : "string" }
+        items: { type: itemType === "number" ? "number" : "string" },
       };
     } else if (typeName === "enum") {
       prop = { type: "string", enum: innerDef.values };
@@ -138,10 +138,7 @@ export class TradingAgent {
 
     // Initialize evolution engine
     this.strategyStore = new StrategyStore();
-    const evolutionEngine = new EvolutionEngine(
-      this.strategyStore,
-      deps.dataManager
-    );
+    const evolutionEngine = new EvolutionEngine(this.strategyStore, deps.dataManager);
     const evolutionTools = createEvolutionTools({
       engine: evolutionEngine,
       store: this.strategyStore,
@@ -254,10 +251,7 @@ export class TradingAgent {
     // Run cycle immediately, then schedule next
     this.runCycle().then(() => {
       if (this.state.current === "running") {
-        this.cycleTimer = setTimeout(
-          () => this.scheduleCycle(),
-          this.config.cycleIntervalMs
-        );
+        this.cycleTimer = setTimeout(() => this.scheduleCycle(), this.config.cycleIntervalMs);
       }
     });
   }
@@ -278,14 +272,12 @@ export class TradingAgent {
 
     try {
       // Get current state for the prompt
-      const portfolioState = this.deps.portfolioManager.getState();
+      const _portfolioState = this.deps.portfolioManager.getState();
       const positions = this.deps.portfolioManager.getPositions();
 
       // Update prices
       if (positions.length > 0) {
-        const quotes = await this.deps.dataManager.getQuotes(
-          positions.map((p) => p.symbol)
-        );
+        const quotes = await this.deps.dataManager.getQuotes(positions.map((p) => p.symbol));
         this.deps.portfolioManager.updatePrices(quotes);
       }
 
@@ -318,13 +310,11 @@ export class TradingAgent {
       const cyclePrompt = buildCyclePrompt(updatedState, riskStatus, undefined, memoryContext);
 
       // Convert tools to Anthropic format with proper JSON schema types
-      const anthropicTools: Anthropic.Tool[] = Object.entries(this.tools).map(
-        ([name, tool]) => ({
-          name,
-          description: tool.description,
-          input_schema: zodToJsonSchema(tool.inputSchema),
-        })
-      );
+      const anthropicTools: Anthropic.Tool[] = Object.entries(this.tools).map(([name, tool]) => ({
+        name,
+        description: tool.description,
+        input_schema: zodToJsonSchema(tool.inputSchema),
+      }));
 
       // Create canUseTool function
       const canUseTool = createCanUseTool({
@@ -338,9 +328,7 @@ export class TradingAgent {
       const hooks = createHooks(this.logger, this.state);
 
       // Run conversation loop
-      const messages: Anthropic.MessageParam[] = [
-        { role: "user", content: cyclePrompt },
-      ];
+      const messages: Anthropic.MessageParam[] = [{ role: "user", content: cyclePrompt }];
 
       while (turnsUsed < this.config.maxTurns) {
         // Check if we should stop
@@ -389,7 +377,8 @@ export class TradingAgent {
         }
 
         // Process all tool calls and collect results
-        const toolResults: Array<{ type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }> = [];
+        const toolResults: Array<{ type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }> =
+          [];
 
         for (const toolBlock of toolUseBlocks) {
           const { id, name: toolName, input: toolInput } = toolBlock;

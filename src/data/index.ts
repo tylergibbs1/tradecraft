@@ -1,14 +1,14 @@
-import { DataProvider } from "../config/schema.js";
+import type { DataProvider } from "../config/schema.js";
 import { DataCache } from "./cache.js";
-import { YahooDataProvider } from "./providers/yahoo.js";
 import { PolygonQuotesProvider } from "./providers/polygon/index.js";
-import { DataProviderInterface, OHLCV, Quote, TimeFrame } from "./types.js";
+import { YahooDataProvider } from "./providers/yahoo.js";
+import type { DataProviderInterface, OHLCV, Quote, TimeFrame } from "./types.js";
 
-export * from "./types.js";
 export * from "./cache.js";
-export { getExaProvider, ExaDataProvider } from "./providers/exa.js";
-export { getEdgarProvider, EdgarDataProvider } from "./providers/edgar.js";
+export { EdgarDataProvider, getEdgarProvider } from "./providers/edgar.js";
+export { ExaDataProvider, getExaProvider } from "./providers/exa.js";
 export { getNewsProvider, NewsDataProvider } from "./providers/news.js";
+export * from "./types.js";
 
 export class DataManager {
   private provider: DataProviderInterface;
@@ -22,7 +22,6 @@ export class DataManager {
         if (!apiKey) throw new Error("Polygon requires an API key");
         this.provider = new PolygonQuotesProvider(apiKey);
         break;
-      case "yahoo":
       default:
         this.provider = new YahooDataProvider();
         break;
@@ -50,9 +49,7 @@ export class DataManager {
     const quotes = new Map<string, Quote>();
 
     // Fetch in parallel with error handling
-    const results = await Promise.allSettled(
-      symbols.map((s) => this.getQuote(s))
-    );
+    const results = await Promise.allSettled(symbols.map((s) => this.getQuote(s)));
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
@@ -73,19 +70,14 @@ export class DataManager {
     timeframe: TimeFrame,
     startDate: Date,
     endDate: Date,
-    useCache: boolean = true
+    useCache: boolean = true,
   ): Promise<OHLCV[]> {
     if (useCache) {
       const cached = this.cache.getHistory(symbol, timeframe, startDate, endDate);
       if (cached) return cached;
     }
 
-    const history = await this.provider.getHistory(
-      symbol,
-      timeframe,
-      startDate,
-      endDate
-    );
+    const history = await this.provider.getHistory(symbol, timeframe, startDate, endDate);
     this.cache.setHistory(symbol, timeframe, startDate, endDate, history);
     return history;
   }

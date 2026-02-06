@@ -16,17 +16,17 @@ export interface TradeAttribution {
 export interface SignalContribution {
   signalId: string;
   agentRole: string;
-  signal: string;          // "BUY" | "SELL" etc.
+  signal: string; // "BUY" | "SELL" etc.
   confidence: number;
-  weight: number;          // Weight at time of trade
-  attributedPnl: number;   // Share of P&L attributed to this signal
+  weight: number; // Weight at time of trade
+  attributedPnl: number; // Share of P&L attributed to this signal
 }
 
 export interface AgentPerformance {
   agentRole: string;
   totalSignals: number;
   accurateSignals: number;
-  accuracy: number;        // 0-1
+  accuracy: number; // 0-1
   totalAttributedPnl: number;
   averageConfidence: number;
   currentWeight: number;

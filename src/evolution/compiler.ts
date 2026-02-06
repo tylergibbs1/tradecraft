@@ -6,23 +6,16 @@
  * indicator functions.
  */
 
-import { Strategy, Signal, BacktestPosition } from "../backtest/types.js";
 import {
-  computeSMA,
-  computeEMA,
-  computeRSI,
-  computeMACD,
   computeATR,
   computeBollingerBands,
+  computeEMA,
+  computeMACD,
+  computeRSI,
+  computeSMA,
 } from "../backtest/indicators.js";
-import {
-  StrategySpec,
-  EntryRule,
-  ConditionNode,
-  LogicNode,
-  IndicatorRef,
-  ExitRules,
-} from "./types.js";
+import type { BacktestPosition, Signal, Strategy } from "../backtest/types.js";
+import type { ConditionNode, EntryRule, ExitRules, IndicatorRef, LogicNode, StrategySpec } from "./types.js";
 
 interface Bar {
   timestamp: number;
@@ -47,9 +40,9 @@ interface IndicatorCache {
 
 function buildCache(history: Bar[]): IndicatorCache {
   return {
-    closes: history.map(b => b.close),
-    highs: history.map(b => b.high),
-    lows: history.map(b => b.low),
+    closes: history.map((b) => b.close),
+    highs: history.map((b) => b.high),
+    lows: history.map((b) => b.low),
     sma: new Map(),
     ema: new Map(),
     rsi: new Map(),
@@ -59,11 +52,7 @@ function buildCache(history: Bar[]): IndicatorCache {
   };
 }
 
-function getIndicatorValue(
-  ref: IndicatorRef,
-  cache: IndicatorCache,
-  index: number
-): number {
+function getIndicatorValue(ref: IndicatorRef, cache: IndicatorCache, index: number): number {
   const period = ref.period ?? 14;
 
   switch (ref.type) {
@@ -118,40 +107,40 @@ function getIndicatorValue(
 function resolveValue(
   node: IndicatorRef | { type: "price" } | { type: "literal"; value: number },
   cache: IndicatorCache,
-  index: number
+  index: number,
 ): number {
   if ("value" in node) return node.value;
   if (node.type === "price") return cache.closes[index] ?? NaN;
   return getIndicatorValue(node as IndicatorRef, cache, index);
 }
 
-function evaluateComparison(
-  cond: ConditionNode,
-  cache: IndicatorCache,
-  currentIdx: number
-): boolean {
+function evaluateComparison(cond: ConditionNode, cache: IndicatorCache, currentIdx: number): boolean {
   const leftVal = resolveValue(cond.left, cache, currentIdx);
   const rightVal = resolveValue(cond.right, cache, currentIdx);
 
-  if (isNaN(leftVal) || isNaN(rightVal)) return false;
+  if (Number.isNaN(leftVal) || Number.isNaN(rightVal)) return false;
 
   switch (cond.op) {
-    case "gt": return leftVal > rightVal;
-    case "lt": return leftVal < rightVal;
-    case "gte": return leftVal >= rightVal;
-    case "lte": return leftVal <= rightVal;
+    case "gt":
+      return leftVal > rightVal;
+    case "lt":
+      return leftVal < rightVal;
+    case "gte":
+      return leftVal >= rightVal;
+    case "lte":
+      return leftVal <= rightVal;
     case "crosses_above": {
       if (currentIdx < 1) return false;
       const prevLeft = resolveValue(cond.left, cache, currentIdx - 1);
       const prevRight = resolveValue(cond.right, cache, currentIdx - 1);
-      if (isNaN(prevLeft) || isNaN(prevRight)) return false;
+      if (Number.isNaN(prevLeft) || Number.isNaN(prevRight)) return false;
       return prevLeft <= prevRight && leftVal > rightVal;
     }
     case "crosses_below": {
       if (currentIdx < 1) return false;
       const prevLeft = resolveValue(cond.left, cache, currentIdx - 1);
       const prevRight = resolveValue(cond.right, cache, currentIdx - 1);
-      if (isNaN(prevLeft) || isNaN(prevRight)) return false;
+      if (Number.isNaN(prevLeft) || Number.isNaN(prevRight)) return false;
       return prevLeft >= prevRight && leftVal < rightVal;
     }
     default:
@@ -159,20 +148,16 @@ function evaluateComparison(
   }
 }
 
-function evaluateRule(
-  rule: EntryRule,
-  cache: IndicatorCache,
-  currentIdx: number
-): boolean {
+function evaluateRule(rule: EntryRule, cache: IndicatorCache, currentIdx: number): boolean {
   if (rule.kind === "comparison") {
     return evaluateComparison(rule as ConditionNode, cache, currentIdx);
   }
   const logic = rule as LogicNode;
   if (logic.kind === "and") {
-    return logic.conditions.every(c => evaluateRule(c, cache, currentIdx));
+    return logic.conditions.every((c) => evaluateRule(c, cache, currentIdx));
   }
   if (logic.kind === "or") {
-    return logic.conditions.some(c => evaluateRule(c, cache, currentIdx));
+    return logic.conditions.some((c) => evaluateRule(c, cache, currentIdx));
   }
   return false;
 }
@@ -181,7 +166,7 @@ function checkExitRules(
   exitRules: ExitRules,
   position: BacktestPosition,
   currentPrice: number,
-  barsHeld: number
+  barsHeld: number,
 ): { shouldExit: boolean; reason: string } {
   const pnlPercent = (currentPrice - position.averageCost) / position.averageCost;
 
@@ -236,11 +221,7 @@ export function compileStrategy(spec: StrategySpec): Strategy {
   return {
     name: spec.name,
     description: spec.description,
-    generateSignals(
-      symbol: string,
-      history: Bar[],
-      position: BacktestPosition | null
-    ): Signal {
+    generateSignals(symbol: string, history: Bar[], position: BacktestPosition | null): Signal {
       if (history.length < minBars) {
         return { symbol, type: "hold", strength: 0 };
       }

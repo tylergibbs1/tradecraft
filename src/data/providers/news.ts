@@ -9,12 +9,12 @@
  * - Yahoo Finance News (free, limited)
  */
 
-import { NewsItem } from '../../agents/types.js';
-import { getExaProvider, ExaDataProvider } from './exa.js';
+import type { NewsItem } from "../../agents/types.js";
+import { type ExaDataProvider, getExaProvider } from "./exa.js";
 
-const YAHOO_NEWS_URL = 'https://query1.finance.yahoo.com';
-const ALPHA_VANTAGE_URL = 'https://www.alphavantage.co/query';
-const FINNHUB_URL = 'https://finnhub.io/api/v1';
+const YAHOO_NEWS_URL = "https://query1.finance.yahoo.com";
+const ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query";
+const FINNHUB_URL = "https://finnhub.io/api/v1";
 
 interface NewsProviderConfig {
   alphaVantageKey?: string;
@@ -63,7 +63,7 @@ interface FinnhubNewsResponse {
 }
 
 export class NewsDataProvider {
-  name = 'News Provider';
+  name = "News Provider";
   private alphaVantageKey?: string;
   private finnhubKey?: string;
   private exaApiKey?: string;
@@ -100,7 +100,7 @@ export class NewsDataProvider {
         });
         results.push(...exaNews);
       } catch (error) {
-        console.error('Exa news error:', error);
+        console.error("Exa news error:", error);
       }
     }
 
@@ -110,7 +110,7 @@ export class NewsDataProvider {
         const avNews = await this.getAlphaVantageNews(symbol, limit - results.length);
         results.push(...avNews);
       } catch (error) {
-        console.error('Alpha Vantage news error:', error);
+        console.error("Alpha Vantage news error:", error);
       }
     }
 
@@ -120,7 +120,7 @@ export class NewsDataProvider {
         const fhNews = await this.getFinnhubNews(symbol, limit - results.length);
         results.push(...fhNews);
       } catch (error) {
-        console.error('Finnhub news error:', error);
+        console.error("Finnhub news error:", error);
       }
     }
 
@@ -130,18 +130,20 @@ export class NewsDataProvider {
         const yahooNews = await this.getYahooNews(symbol, limit);
         results.push(...yahooNews);
       } catch (error) {
-        console.error('Yahoo news error:', error);
+        console.error("Yahoo news error:", error);
       }
     }
 
     // Dedupe by title
     const seen = new Set<string>();
-    return results.filter(item => {
-      const key = item.title.toLowerCase().slice(0, 50);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, limit);
+    return results
+      .filter((item) => {
+        const key = item.title.toLowerCase().slice(0, 50);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, limit);
   }
 
   /**
@@ -149,7 +151,7 @@ export class NewsDataProvider {
    */
   private async getAlphaVantageNews(symbol: string, limit: number): Promise<NewsItem[]> {
     if (!this.alphaVantageKey) {
-      throw new Error('Alpha Vantage API key not configured');
+      throw new Error("Alpha Vantage API key not configured");
     }
 
     const url = `${ALPHA_VANTAGE_URL}?function=NEWS_SENTIMENT&tickers=${symbol}&limit=${limit}&apikey=${this.alphaVantageKey}`;
@@ -165,11 +167,9 @@ export class NewsDataProvider {
       return [];
     }
 
-    return data.feed.map(item => {
+    return data.feed.map((item) => {
       // Find sentiment for our specific ticker
-      const tickerSentiment = item.ticker_sentiment?.find(
-        ts => ts.ticker.toUpperCase() === symbol.toUpperCase()
-      );
+      const tickerSentiment = item.ticker_sentiment?.find((ts) => ts.ticker.toUpperCase() === symbol.toUpperCase());
 
       return {
         title: item.title,
@@ -177,9 +177,7 @@ export class NewsDataProvider {
         url: item.url,
         publishedAt: this.parseAlphaVantageTime(item.time_published),
         summary: item.summary,
-        sentiment: tickerSentiment
-          ? parseFloat(tickerSentiment.ticker_sentiment_score)
-          : item.overall_sentiment_score,
+        sentiment: tickerSentiment ? parseFloat(tickerSentiment.ticker_sentiment_score) : item.overall_sentiment_score,
       };
     });
   }
@@ -189,7 +187,7 @@ export class NewsDataProvider {
    */
   private async getFinnhubNews(symbol: string, limit: number): Promise<NewsItem[]> {
     if (!this.finnhubKey) {
-      throw new Error('Finnhub API key not configured');
+      throw new Error("Finnhub API key not configured");
     }
 
     // Get news from last 7 days
@@ -197,7 +195,7 @@ export class NewsDataProvider {
     const from = new Date();
     from.setDate(from.getDate() - 7);
 
-    const url = `${FINNHUB_URL}/company-news?symbol=${symbol}&from=${from.toISOString().split('T')[0]}&to=${to.toISOString().split('T')[0]}&token=${this.finnhubKey}`;
+    const url = `${FINNHUB_URL}/company-news?symbol=${symbol}&from=${from.toISOString().split("T")[0]}&to=${to.toISOString().split("T")[0]}&token=${this.finnhubKey}`;
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -206,7 +204,7 @@ export class NewsDataProvider {
 
     const data = (await response.json()) as FinnhubNewsResponse[];
 
-    return data.slice(0, limit).map(item => ({
+    return data.slice(0, limit).map((item) => ({
       title: item.headline,
       source: item.source,
       url: item.url,
@@ -225,7 +223,7 @@ export class NewsDataProvider {
 
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
       },
     });
 
@@ -233,18 +231,20 @@ export class NewsDataProvider {
       throw new Error(`Yahoo API error: ${response.status}`);
     }
 
-    const data = (await response.json()) as { news?: Array<{
-      title: string;
-      publisher: string;
-      link: string;
-      providerPublishTime: number;
-    }> };
+    const data = (await response.json()) as {
+      news?: Array<{
+        title: string;
+        publisher: string;
+        link: string;
+        providerPublishTime: number;
+      }>;
+    };
 
     if (!data.news) {
       return [];
     }
 
-    return data.news.map(item => ({
+    return data.news.map((item) => ({
       title: item.title,
       source: item.publisher,
       url: item.link,
@@ -257,13 +257,13 @@ export class NewsDataProvider {
    */
   calculateAggregateSentiment(news: NewsItem[]): {
     score: number;
-    label: 'very_negative' | 'negative' | 'neutral' | 'positive' | 'very_positive';
+    label: "very_negative" | "negative" | "neutral" | "positive" | "very_positive";
     count: number;
   } {
-    const withSentiment = news.filter(n => n.sentiment !== undefined);
+    const withSentiment = news.filter((n) => n.sentiment !== undefined);
 
     if (withSentiment.length === 0) {
-      return { score: 0, label: 'neutral', count: 0 };
+      return { score: 0, label: "neutral", count: 0 };
     }
 
     // Weight more recent articles higher
@@ -282,12 +282,12 @@ export class NewsDataProvider {
 
     const score = totalWeight > 0 ? weightedSum / totalWeight : 0;
 
-    let label: 'very_negative' | 'negative' | 'neutral' | 'positive' | 'very_positive';
-    if (score <= -0.35) label = 'very_negative';
-    else if (score <= -0.15) label = 'negative';
-    else if (score >= 0.35) label = 'very_positive';
-    else if (score >= 0.15) label = 'positive';
-    else label = 'neutral';
+    let label: "very_negative" | "negative" | "neutral" | "positive" | "very_positive";
+    if (score <= -0.35) label = "very_negative";
+    else if (score <= -0.15) label = "negative";
+    else if (score >= 0.35) label = "very_positive";
+    else if (score >= 0.15) label = "positive";
+    else label = "neutral";
 
     return { score, label, count: withSentiment.length };
   }
@@ -301,7 +301,7 @@ export class NewsDataProvider {
     news: NewsItem[];
   }> {
     // Get news for major indices/ETFs
-    const symbols = ['SPY', 'QQQ', 'DIA'];
+    const symbols = ["SPY", "QQQ", "DIA"];
     const allNews: NewsItem[] = [];
 
     for (const symbol of symbols) {
@@ -327,7 +327,7 @@ export class NewsDataProvider {
   async isAvailable(): Promise<boolean> {
     // Try Yahoo first (always available)
     try {
-      const news = await this.getYahooNews('AAPL', 1);
+      const news = await this.getYahooNews("AAPL", 1);
       return news.length > 0;
     } catch {
       return false;

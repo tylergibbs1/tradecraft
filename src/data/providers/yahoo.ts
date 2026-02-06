@@ -1,4 +1,4 @@
-import { DataProviderInterface, Quote, OHLCV, TimeFrame } from "../types.js";
+import type { DataProviderInterface, OHLCV, Quote, TimeFrame } from "../types.js";
 
 const BASE_URL = "https://query1.finance.yahoo.com";
 
@@ -26,7 +26,7 @@ export class YahooDataProvider implements DataProviderInterface {
       throw new Error(`Yahoo Finance quote failed for ${symbol}: ${resp.status}`);
     }
 
-    const json = await resp.json() as any;
+    const json = (await resp.json()) as any;
     const result = json?.chart?.result?.[0];
     if (!result) {
       throw new Error(`No quote data for ${symbol}`);
@@ -46,12 +46,7 @@ export class YahooDataProvider implements DataProviderInterface {
     };
   }
 
-  async getHistory(
-    symbol: string,
-    timeframe: TimeFrame,
-    startDate: Date,
-    endDate: Date
-  ): Promise<OHLCV[]> {
+  async getHistory(symbol: string, timeframe: TimeFrame, startDate: Date, endDate: Date): Promise<OHLCV[]> {
     const period1 = Math.floor(startDate.getTime() / 1000);
     const period2 = Math.floor(endDate.getTime() / 1000);
     const interval = TIMEFRAME_MAP[timeframe] ?? "1d";
@@ -68,7 +63,7 @@ export class YahooDataProvider implements DataProviderInterface {
       throw new Error(`Yahoo Finance history failed for ${symbol}: ${resp.status}`);
     }
 
-    const json = await resp.json() as any;
+    const json = (await resp.json()) as any;
     const result = json?.chart?.result?.[0];
     if (!result) {
       throw new Error(`No history data for ${symbol}`);

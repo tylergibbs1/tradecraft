@@ -1,6 +1,5 @@
-import React from "react";
 import { Box, Text } from "ink";
-import { AgentState } from "../../agent/types.js";
+import type { AgentState } from "../../agent/types.js";
 
 interface HeaderProps {
   agentState: AgentState;
@@ -59,19 +58,14 @@ export function Header({ agentState, equity, dailyPnL, activeTab, agentMode }: H
       <Box marginTop={1}>
         {TAB_NAMES.map((name, i) => (
           <Box key={`tab-${i}`} marginRight={2}>
-            <Text
-              color={i === activeTab ? "cyan" : "gray"}
-              bold={i === activeTab}
-            >
+            <Text color={i === activeTab ? "cyan" : "gray"} bold={i === activeTab}>
               [{i + 1}] {name}
             </Text>
           </Box>
         ))}
       </Box>
       <Box>
-        <Text color="gray">
-          ─────────────────────────────────────────────────────────────────
-        </Text>
+        <Text color="gray">─────────────────────────────────────────────────────────────────</Text>
       </Box>
     </Box>
   );

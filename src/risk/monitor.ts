@@ -1,10 +1,6 @@
-import { RiskLimits } from "../config/schema.js";
+import type { RiskLimits } from "../config/schema.js";
 import { CircuitBreaker } from "./circuit.js";
-import {
-  OrderRequest,
-  ValidationResult,
-  RiskStatus,
-} from "./types.js";
+import type { OrderRequest, RiskStatus, ValidationResult } from "./types.js";
 
 export interface PortfolioSnapshot {
   cash: number;
@@ -27,11 +23,7 @@ export class RiskMonitor {
   /**
    * Validate an order against risk limits
    */
-  preValidate(
-    order: OrderRequest,
-    portfolio: PortfolioSnapshot,
-    currentPrice: number
-  ): ValidationResult {
+  preValidate(order: OrderRequest, portfolio: PortfolioSnapshot, currentPrice: number): ValidationResult {
     // Check circuit breaker first
     if (!this.circuitBreaker.canTrade()) {
       return {
@@ -45,9 +37,7 @@ export class RiskMonitor {
 
     // Calculate what position size would be after this order
     const existingPosition = portfolio.positions.get(order.symbol);
-    const existingValue = existingPosition
-      ? existingPosition.quantity * existingPosition.currentPrice
-      : 0;
+    const existingValue = existingPosition ? existingPosition.quantity * existingPosition.currentPrice : 0;
     const newPositionValue = existingValue + positionValue;
     const positionPercent = Math.abs(newPositionValue) / portfolio.equity;
 
@@ -120,12 +110,8 @@ export class RiskMonitor {
    * Check portfolio-level risk limits and potentially trip circuit breaker
    */
   checkPortfolioRisk(portfolio: PortfolioSnapshot): ValidationResult {
-    const dailyLossPercent = portfolio.dailyPnL < 0
-      ? Math.abs(portfolio.dailyPnL) / portfolio.equity
-      : 0;
-    const weeklyLossPercent = portfolio.weeklyPnL < 0
-      ? Math.abs(portfolio.weeklyPnL) / portfolio.equity
-      : 0;
+    const dailyLossPercent = portfolio.dailyPnL < 0 ? Math.abs(portfolio.dailyPnL) / portfolio.equity : 0;
+    const weeklyLossPercent = portfolio.weeklyPnL < 0 ? Math.abs(portfolio.weeklyPnL) / portfolio.equity : 0;
     const drawdown = (portfolio.peakEquity - portfolio.equity) / portfolio.peakEquity;
 
     // Check daily loss limit
@@ -172,8 +158,7 @@ export class RiskMonitor {
   getStatus(portfolio: PortfolioSnapshot): RiskStatus {
     const dailyPnL = portfolio.dailyPnL;
     const weeklyPnL = portfolio.weeklyPnL;
-    const currentDrawdown =
-      (portfolio.peakEquity - portfolio.equity) / portfolio.peakEquity;
+    const currentDrawdown = (portfolio.peakEquity - portfolio.equity) / portfolio.peakEquity;
 
     return {
       circuitBreaker: this.circuitBreaker.getStatus(),

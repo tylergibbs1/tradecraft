@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-import { DataManager } from "./data/index.js";
-import { AgentBacktestEngine, AgentBacktestConfig, AgentBacktestResult } from "./backtest/agent-engine.js";
-import { loadConfig, configExists } from "./config/index.js";
 import * as asciichart from "asciichart";
+import { type AgentBacktestConfig, AgentBacktestEngine, type AgentBacktestResult } from "./backtest/agent-engine.js";
+import { configExists, loadConfig } from "./config/index.js";
+import { DataManager } from "./data/index.js";
 
 function printUsage(): void {
   console.log(`
@@ -30,16 +30,16 @@ Example:
 }
 
 function formatCurrency(value: number): string {
-  return "$" + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatPercent(value: number): string {
   const sign = value >= 0 ? "+" : "";
-  return sign + (value * 100).toFixed(2) + "%";
+  return `${sign + (value * 100).toFixed(2)}%`;
 }
 
 function printResults(result: AgentBacktestResult): void {
-  console.log("\n" + "═".repeat(60));
+  console.log(`\n${"═".repeat(60)}`);
   console.log("              AGENT BACKTEST RESULTS");
   console.log("═".repeat(60));
 
@@ -53,7 +53,9 @@ function printResults(result: AgentBacktestResult): void {
   console.log("\nRISK METRICS");
   console.log("─".repeat(40));
   console.log(`Sharpe Ratio:      ${result.sharpeRatio.toFixed(2)}`);
-  console.log(`Max Drawdown:      ${formatPercent(result.maxDrawdown)}${result.maxDrawdownDate ? ` (${result.maxDrawdownDate})` : ""}`);
+  console.log(
+    `Max Drawdown:      ${formatPercent(result.maxDrawdown)}${result.maxDrawdownDate ? ` (${result.maxDrawdownDate})` : ""}`,
+  );
 
   console.log("\nTRADE STATISTICS");
   console.log("─".repeat(40));
@@ -76,22 +78,27 @@ function printResults(result: AgentBacktestResult): void {
   console.log(`Cycle Frequency:   Every ${result.config.cycleFrequency} trading day(s)`);
   console.log(`Trading Days:      ${result.equityCurve.length}`);
   console.log(`Symbols:           ${result.config.symbols.join(", ")}`);
-  console.log(`Period:            ${result.config.startDate.toISOString().split("T")[0]} to ${result.config.endDate.toISOString().split("T")[0]}`);
+  console.log(
+    `Period:            ${result.config.startDate.toISOString().split("T")[0]} to ${result.config.endDate.toISOString().split("T")[0]}`,
+  );
 
   // Print equity curve
   if (result.equityCurve.length > 5) {
     console.log("\nEQUITY CURVE");
     console.log("─".repeat(40));
-    const equityValues = result.equityCurve.map(s => s.equity);
-    const sampledValues = equityValues.length > 80
-      ? equityValues.filter((_, i) => i % Math.ceil(equityValues.length / 80) === 0)
-      : equityValues;
+    const equityValues = result.equityCurve.map((s) => s.equity);
+    const sampledValues =
+      equityValues.length > 80
+        ? equityValues.filter((_, i) => i % Math.ceil(equityValues.length / 80) === 0)
+        : equityValues;
 
     try {
-      console.log(asciichart.plot(sampledValues, {
-        height: 10,
-        format: (x: number) => formatCurrency(x).padStart(12),
-      }));
+      console.log(
+        asciichart.plot(sampledValues, {
+          height: 10,
+          format: (x: number) => formatCurrency(x).padStart(12),
+        }),
+      );
     } catch {
       console.log("(Unable to render chart)");
     }
@@ -103,17 +110,17 @@ function printResults(result: AgentBacktestResult): void {
     console.log("─".repeat(40));
     const recentTrades = result.trades.slice(-10);
     for (const trade of recentTrades) {
-      const pnlStr = trade.pnl !== undefined
-        ? ` P&L: ${trade.pnl >= 0 ? "+" : ""}${formatCurrency(trade.pnl)}`
-        : "";
-      console.log(`  ${trade.date} ${trade.side.toUpperCase().padEnd(4)} ${trade.symbol.padEnd(5)} ${trade.quantity} @ ${formatCurrency(trade.price)}${pnlStr}`);
+      const pnlStr = trade.pnl !== undefined ? ` P&L: ${trade.pnl >= 0 ? "+" : ""}${formatCurrency(trade.pnl)}` : "";
+      console.log(
+        `  ${trade.date} ${trade.side.toUpperCase().padEnd(4)} ${trade.symbol.padEnd(5)} ${trade.quantity} @ ${formatCurrency(trade.price)}${pnlStr}`,
+      );
     }
     if (result.trades.length > 10) {
       console.log(`  ... and ${result.trades.length - 10} more trades`);
     }
   }
 
-  console.log("\n" + "═".repeat(60));
+  console.log(`\n${"═".repeat(60)}`);
 }
 
 async function main() {
@@ -152,7 +159,7 @@ async function main() {
   // Override from command line
   const symbolsArg = getArg("symbols");
   if (symbolsArg) {
-    symbols = symbolsArg.split(",").map(s => s.trim().toUpperCase());
+    symbols = symbolsArg.split(",").map((s) => s.trim().toUpperCase());
   }
 
   const capitalArg = getArg("capital");
@@ -167,16 +174,14 @@ async function main() {
 
   const frequencyArg = getArg("frequency");
   if (frequencyArg) {
-    cycleFrequency = parseInt(frequencyArg);
+    cycleFrequency = parseInt(frequencyArg, 10);
   }
 
   const startArg = getArg("start");
   const endArg = getArg("end");
 
   const endDate = endArg ? new Date(endArg) : new Date();
-  const startDate = startArg
-    ? new Date(startArg)
-    : new Date(endDate.getTime() - 90 * 24 * 60 * 60 * 1000); // 3 months ago
+  const startDate = startArg ? new Date(startArg) : new Date(endDate.getTime() - 90 * 24 * 60 * 60 * 1000); // 3 months ago
 
   // Estimate cost
   const estimatedDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));

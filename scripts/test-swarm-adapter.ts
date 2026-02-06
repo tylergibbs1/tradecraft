@@ -8,8 +8,8 @@
  */
 
 import { SwarmTradingAgent } from "../src/agent/swarm-adapter.js";
-import type { AgentState, AgentMessage, AgentCycleResult } from "../src/agent/types.js";
-import { loadConfig, defaultConfig } from "../src/config/index.js";
+import type { AgentCycleResult, AgentMessage, AgentState } from "../src/agent/types.js";
+import { defaultConfig } from "../src/config/index.js";
 
 console.log("Testing Swarm Trading Agent Adapter\n");
 console.log("=".repeat(50));
@@ -39,14 +39,12 @@ try {
   delete process.env.ANTHROPIC_API_KEY;
 
   try {
-    const agent = new SwarmTradingAgent(
-      {
-        config: { ...testConfig, anthropicApiKey: undefined },
-        portfolioManager: null as any,
-        riskMonitor: null as any,
-        dataManager: null as any,
-      }
-    );
+    const _agent = new SwarmTradingAgent({
+      config: { ...testConfig, anthropicApiKey: undefined },
+      portfolioManager: null as any,
+      riskMonitor: null as any,
+      dataManager: null as any,
+    });
     console.log("   ✗ Should have thrown without API key");
   } catch (e) {
     console.log(`   ✓ Correctly throws: ${(e as Error).message}`);
@@ -73,12 +71,12 @@ console.log("\n4. Testing state machine logic...");
 const states: AgentState[] = [];
 
 // Simulate state transitions as documented
-states.push("stopped");   // initial
-states.push("running");   // after start()
-states.push("paused");    // after pause()
-states.push("running");   // after resume()
-states.push("halted");    // after halt()
-states.push("stopped");   // after stop() from halted
+states.push("stopped"); // initial
+states.push("running"); // after start()
+states.push("paused"); // after pause()
+states.push("running"); // after resume()
+states.push("halted"); // after halt()
+states.push("stopped"); // after stop() from halted
 
 console.log(`   State transitions: ${states.join(" -> ")}`);
 console.log("   ✓ State machine logic verified");
@@ -104,6 +102,6 @@ const mockResult: AgentCycleResult = {
 console.log(`   Fields: ${Object.keys(mockResult).join(", ")}`);
 console.log("   ✓ Result format matches TradingAgent output");
 
-console.log("\n" + "=".repeat(50));
+console.log(`\n${"=".repeat(50)}`);
 console.log("All swarm adapter tests passed!");
 console.log("\nNote: Full integration test requires ANTHROPIC_API_KEY to be set.");

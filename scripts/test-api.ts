@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
+import Anthropic from "@anthropic-ai/sdk";
 /**
  * Test API connections
  */
 import { loadConfig } from "../src/config/index.js";
 import { DataManager } from "../src/data/index.js";
-import Anthropic from "@anthropic-ai/sdk";
 
 async function main() {
   console.log("Testing API Connections\n");
@@ -48,7 +48,9 @@ async function main() {
     const response = await client.messages.create({
       model: config.agentParams.model,
       max_tokens: 100,
-      messages: [{ role: "user", content: "You are a trading assistant. Say 'Trading system online!' and nothing else." }],
+      messages: [
+        { role: "user", content: "You are a trading assistant. Say 'Trading system online!' and nothing else." },
+      ],
     });
 
     const text = response.content[0]?.type === "text" ? response.content[0].text : "";

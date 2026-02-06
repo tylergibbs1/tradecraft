@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import { useState } from "react";
 
 interface NumberInputProps {
   label: string;
@@ -24,7 +24,7 @@ export function NumberInput({
   useInput((input, key) => {
     if (key.return) {
       const num = parseFloat(value);
-      if (isNaN(num)) {
+      if (Number.isNaN(num)) {
         setError("Please enter a valid number");
         return;
       }
@@ -40,10 +40,7 @@ export function NumberInput({
     } else if (key.backspace || key.delete) {
       setValue((v) => v.slice(0, -1));
       setError(null);
-    } else if (
-      (input && /[0-9.]/.test(input)) ||
-      (input === "-" && value.length === 0)
-    ) {
+    } else if ((input && /[0-9.]/.test(input)) || (input === "-" && value.length === 0)) {
       setValue((v) => v + input);
       setError(null);
     }
@@ -52,10 +49,7 @@ export function NumberInput({
   return (
     <Box flexDirection="column">
       <Text>
-        {label}:{" "}
-        <Text color="cyan">
-          {value || "0"}
-        </Text>
+        {label}: <Text color="cyan">{value || "0"}</Text>
         <Text color="cyan">▋</Text>
       </Text>
       {error && (

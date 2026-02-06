@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Test: Strategy Evolution Engine
  *
@@ -10,12 +11,12 @@
  * - Verifies scores are computed
  */
 
+import type { BacktestResult } from "../src/backtest/types.js";
 import { compileStrategy, validateSpec } from "../src/evolution/compiler.js";
+import { mutateStrategy } from "../src/evolution/engine.js";
 import { scoreBacktestResult } from "../src/evolution/scoring.js";
 import { StrategyStore } from "../src/evolution/store.js";
-import { mutateStrategy } from "../src/evolution/engine.js";
 import type { StrategySpec } from "../src/evolution/types.js";
-import type { BacktestResult } from "../src/backtest/types.js";
 
 console.log("Testing Strategy Evolution Engine\n");
 console.log("=".repeat(50));
@@ -33,13 +34,13 @@ const spec: StrategySpec = {
   },
   exitRules: {
     stopLossPercent: 0.05,
-    takeProfitPercent: 0.10,
+    takeProfitPercent: 0.1,
     timeStopDays: 30,
   },
   positionSizing: {
     method: "fixed_percent",
     basePercent: 0.05,
-    maxPercent: 0.10,
+    maxPercent: 0.1,
   },
 };
 console.log("   ✓ Spec created");
@@ -119,13 +120,7 @@ console.log("   ✓ Score computed");
 
 // Test 6: Mutate strategy
 console.log("\n6. Mutating strategy...");
-const mutations = [
-  "adjust_period",
-  "adjust_threshold",
-  "swap_indicator",
-  "adjust_exit",
-  "adjust_sizing",
-] as const;
+const mutations = ["adjust_period", "adjust_threshold", "swap_indicator", "adjust_exit", "adjust_sizing"] as const;
 
 for (const mut of mutations) {
   const { spec: child, mutation } = mutateStrategy(spec, mut);
@@ -145,5 +140,5 @@ const stats = store.getStats();
 console.log(`   Stats: ${JSON.stringify(stats)}`);
 console.log("   ✓ Store operations working");
 
-console.log("\n" + "=".repeat(50));
+console.log(`\n${"=".repeat(50)}`);
 console.log("All evolution tests passed!");

@@ -6,18 +6,18 @@
  * interacting with Claude, and publishing signals.
  */
 
-import { v4 as uuidv4 } from 'uuid';
-import Anthropic from '@anthropic-ai/sdk';
-import {
-  AgentSignal,
+import Anthropic from "@anthropic-ai/sdk";
+import { v4 as uuidv4 } from "uuid";
+import { getSharedSignalBus, type SignalBus } from "./signal-bus.js";
+import type {
+  AgentCycleContext,
   AgentRole,
+  AgentSignal,
   ResearchAgentConfig,
   ResearchContext,
-  AgentCycleContext,
   SignalStrength,
   SignalTimeframe,
-} from './types.js';
-import { SignalBus, getSharedSignalBus } from './signal-bus.js';
+} from "./types.js";
 
 export interface ResearchAgentDependencies {
   apiKey: string;
@@ -88,10 +88,7 @@ export abstract class ResearchAgent {
   /**
    * Override in subclass to build the analysis prompt for a symbol
    */
-  protected abstract buildAnalysisPrompt(
-    symbol: string,
-    context: ResearchContext
-  ): string;
+  protected abstract buildAnalysisPrompt(symbol: string, context: ResearchContext): string;
 
   /**
    * Override in subclass to parse signals from Claude's response
@@ -99,16 +96,13 @@ export abstract class ResearchAgent {
   protected abstract parseSignals(
     symbol: string,
     response: string,
-    context: ResearchContext
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[];
+    context: ResearchContext,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[];
 
   /**
    * Run an analysis cycle for specified symbols
    */
-  async runCycle(
-    symbols: string[],
-    cycleContext: AgentCycleContext
-  ): Promise<AnalysisCycleResult> {
+  async runCycle(symbols: string[], cycleContext: AgentCycleContext): Promise<AnalysisCycleResult> {
     const cycleId = uuidv4();
     const startedAt = new Date().toISOString();
     let tokensUsed = 0;
@@ -132,18 +126,12 @@ export abstract class ResearchAgent {
           }
 
           // Respect max signals per cycle
-          if (
-            this.config.maxSignalsPerCycle &&
-            signalsPublished >= this.config.maxSignalsPerCycle
-          ) {
+          if (this.config.maxSignalsPerCycle && signalsPublished >= this.config.maxSignalsPerCycle) {
             break;
           }
         }
 
-        if (
-          this.config.maxSignalsPerCycle &&
-          signalsPublished >= this.config.maxSignalsPerCycle
-        ) {
+        if (this.config.maxSignalsPerCycle && signalsPublished >= this.config.maxSignalsPerCycle) {
           break;
         }
       }
@@ -180,25 +168,21 @@ export abstract class ResearchAgent {
    */
   protected async analyzeSymbol(
     symbol: string,
-    context: ResearchContext
+    context: ResearchContext,
   ): Promise<{ response: string; tokensUsed: number }> {
     const systemPrompt = this.getSystemPrompt();
     const userPrompt = this.buildAnalysisPrompt(symbol, context);
 
-    const anthropicTools: Anthropic.Tool[] = Array.from(this.tools.values()).map(
-      tool => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.inputSchema,
-      })
-    );
+    const anthropicTools: Anthropic.Tool[] = Array.from(this.tools.values()).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.inputSchema,
+    }));
 
-    const messages: Anthropic.MessageParam[] = [
-      { role: 'user', content: userPrompt },
-    ];
+    const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
 
     let totalTokens = 0;
-    let fullResponse = '';
+    let fullResponse = "";
     let turns = 0;
     const maxTurns = 5;
 
@@ -219,9 +203,9 @@ export abstract class ResearchAgent {
       const toolUseBlocks: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
 
       for (const block of response.content) {
-        if (block.type === 'text') {
-          fullResponse += block.text + '\n';
-        } else if (block.type === 'tool_use') {
+        if (block.type === "text") {
+          fullResponse += `${block.text}\n`;
+        } else if (block.type === "tool_use") {
           toolUseBlocks.push({
             id: block.id,
             name: block.name,
@@ -237,7 +221,7 @@ export abstract class ResearchAgent {
 
       // Process all tool calls
       const toolResults: Array<{
-        type: 'tool_result';
+        type: "tool_result";
         tool_use_id: string;
         content: string;
         is_error?: boolean;
@@ -249,13 +233,13 @@ export abstract class ResearchAgent {
           try {
             const result = await tool.handler(toolBlock.input);
             toolResults.push({
-              type: 'tool_result',
+              type: "tool_result",
               tool_use_id: toolBlock.id,
               content: JSON.stringify(result),
             });
           } catch (error) {
             toolResults.push({
-              type: 'tool_result',
+              type: "tool_result",
               tool_use_id: toolBlock.id,
               content: JSON.stringify({ error: String(error) }),
               is_error: true,
@@ -263,7 +247,7 @@ export abstract class ResearchAgent {
           }
         } else {
           toolResults.push({
-            type: 'tool_result',
+            type: "tool_result",
             tool_use_id: toolBlock.id,
             content: JSON.stringify({ error: `Unknown tool: ${toolBlock.name}` }),
             is_error: true,
@@ -272,8 +256,8 @@ export abstract class ResearchAgent {
       }
 
       // Add messages for next turn
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
+      messages.push({ role: "assistant", content: response.content });
+      messages.push({ role: "user", content: toolResults });
     }
 
     return {
@@ -285,18 +269,15 @@ export abstract class ResearchAgent {
   /**
    * Build research context for a symbol
    */
-  protected async buildResearchContext(
-    symbol: string,
-    cycleContext: AgentCycleContext
-  ): Promise<ResearchContext> {
+  protected async buildResearchContext(symbol: string, _cycleContext: AgentCycleContext): Promise<ResearchContext> {
     // Get existing signals from other agents
     const existingSignals = this.signalBus.getSignals(symbol, {
-      maxAge: 24 * 60 * 60 * 1000,  // Last 24 hours
+      maxAge: 24 * 60 * 60 * 1000, // Last 24 hours
     });
 
     return {
       symbol,
-      existingSignals: existingSignals.filter(s => s.agentId !== this.agentId),
+      existingSignals: existingSignals.filter((s) => s.agentId !== this.agentId),
     };
   }
 
@@ -305,7 +286,7 @@ export abstract class ResearchAgent {
    */
   protected publishSignal(
     symbol: string,
-    signal: Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>
+    signal: Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">,
   ): AgentSignal {
     return this.signalBus.publish({
       ...signal,
@@ -331,8 +312,8 @@ export abstract class ResearchAgent {
       risks?: string[];
       data?: Record<string, unknown>;
       expiresAt?: string;
-    }
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole' | 'symbol'> {
+    },
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole" | "symbol"> {
     return {
       signal,
       confidence: Math.max(0, Math.min(1, confidence)),
@@ -355,9 +336,11 @@ export abstract class ResearchAgent {
    * Get signals published by this agent
    */
   getMySignals(maxAge?: number): AgentSignal[] {
-    return this.signalBus.getAllSignals({
-      roles: [this.role],
-      maxAge,
-    }).filter(s => s.agentId === this.agentId);
+    return this.signalBus
+      .getAllSignals({
+        roles: [this.role],
+        maxAge,
+      })
+      .filter((s) => s.agentId === this.agentId);
   }
 }

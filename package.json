@@ -11,9 +11,20 @@
     "setup": "bun run src/setup-cli.tsx",
     "backtest": "bun run src/backtest-cli.ts",
     "agent-backtest": "bun run src/agent-backtest-cli.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:evolution": "bun test tests/evolution",
+    "test:memory": "bun test tests/memory",
+    "test:attribution": "bun test tests/attribution",
+    "benchmark": "bun run scripts/benchmark.ts",
+    "benchmark:clean": "bun run scripts/benchmark.ts --clean",
+    "lint": "bunx biome check .",
+    "lint:fix": "bunx biome check --write .",
+    "format": "bunx biome check --write .",
+    "ci": "bun run typecheck && bun run lint && bun test"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.14",
     "@types/bun": "latest",
     "@types/react": "^19.2.10",
     "@types/uuid": "^11.0.0",

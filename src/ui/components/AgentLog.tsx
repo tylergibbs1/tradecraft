@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
-import { AgentMessage, AgentCycleResult } from "../../agent/types.js";
+import { useEffect, useState } from "react";
+import type { AgentCycleResult, AgentMessage } from "../../agent/types.js";
 
 interface AgentLogProps {
   messages: AgentMessage[];
@@ -32,11 +32,7 @@ function formatTime(isoString: string): string {
   return new Date(isoString).toLocaleTimeString();
 }
 
-export function AgentLog({
-  messages,
-  cycleResults,
-  maxMessages = 50,
-}: AgentLogProps) {
+export function AgentLog({ messages, cycleResults, maxMessages = 50 }: AgentLogProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("messages");
   const [autoScroll, setAutoScroll] = useState(true);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -63,36 +59,25 @@ export function AgentLog({
     if (autoScroll) {
       setScrollOffset(0);
     }
-  }, [messages.length, autoScroll]);
+  }, [autoScroll]);
 
   return (
     <Box flexDirection="column">
       {/* View Toggle */}
       <Box marginBottom={1}>
-        <Text
-          color={viewMode === "messages" ? "cyan" : "gray"}
-          bold={viewMode === "messages"}
-        >
+        <Text color={viewMode === "messages" ? "cyan" : "gray"} bold={viewMode === "messages"}>
           [m] Messages
         </Text>
         <Text> │ </Text>
-        <Text
-          color={viewMode === "cycles" ? "cyan" : "gray"}
-          bold={viewMode === "cycles"}
-        >
+        <Text color={viewMode === "cycles" ? "cyan" : "gray"} bold={viewMode === "cycles"}>
           [c] Cycles ({cycleResults.length})
         </Text>
         <Text> │ </Text>
-        <Text color={autoScroll ? "green" : "gray"}>
-          [a] Auto-scroll: {autoScroll ? "ON" : "OFF"}
-        </Text>
+        <Text color={autoScroll ? "green" : "gray"}>[a] Auto-scroll: {autoScroll ? "ON" : "OFF"}</Text>
       </Box>
 
       {viewMode === "messages" ? (
-        <MessagesView
-          messages={displayMessages}
-          scrollOffset={scrollOffset}
-        />
+        <MessagesView messages={displayMessages} scrollOffset={scrollOffset} />
       ) : (
         <CyclesView cycles={cycleResults} />
       )}
@@ -100,17 +85,8 @@ export function AgentLog({
   );
 }
 
-function MessagesView({
-  messages,
-  scrollOffset,
-}: {
-  messages: AgentMessage[];
-  scrollOffset: number;
-}) {
-  const visibleMessages = messages.slice(
-    -(15 + scrollOffset),
-    messages.length - scrollOffset || undefined
-  );
+function MessagesView({ messages, scrollOffset }: { messages: AgentMessage[]; scrollOffset: number }) {
+  const visibleMessages = messages.slice(-(15 + scrollOffset), messages.length - scrollOffset || undefined);
 
   if (visibleMessages.length === 0) {
     return <Text color="gray">No messages yet</Text>;
@@ -126,9 +102,7 @@ function MessagesView({
           </Text>
           <Text color={MESSAGE_COLORS[msg.type]}>
             {" "}
-            {msg.content.length > 100
-              ? msg.content.slice(0, 100) + "..."
-              : msg.content}
+            {msg.content.length > 100 ? `${msg.content.slice(0, 100)}...` : msg.content}
           </Text>
         </Box>
       ))}
@@ -161,11 +135,7 @@ function CyclesView({ cycles }: { cycles: AgentCycleResult[] }) {
       {/* Rows */}
       {recentCycles.map((cycle) => {
         const duration = cycle.completedAt
-          ? (
-              (new Date(cycle.completedAt).getTime() -
-                new Date(cycle.startedAt).getTime()) /
-              1000
-            ).toFixed(1) + "s"
+          ? `${((new Date(cycle.completedAt).getTime() - new Date(cycle.startedAt).getTime()) / 1000).toFixed(1)}s`
           : "...";
 
         return (
@@ -176,12 +146,10 @@ function CyclesView({ cycles }: { cycles: AgentCycleResult[] }) {
               {duration.padEnd(10)}
               {cycle.turnsUsed.toString().padStart(8)}
               {cycle.tokensUsed.toString().padStart(10)}
-              {"$" + cycle.costUsd.toFixed(3).padStart(7)}
+              {`$${cycle.costUsd.toFixed(3).padStart(7)}`}
               {cycle.ordersPlaced.toString().padStart(8)}
             </Text>
-            <Text color={cycle.error ? "red" : "green"}>
-              {(cycle.error ? "ERROR" : "OK").padEnd(10)}
-            </Text>
+            <Text color={cycle.error ? "red" : "green"}>{(cycle.error ? "ERROR" : "OK").padEnd(10)}</Text>
           </Box>
         );
       })}
@@ -189,8 +157,7 @@ function CyclesView({ cycles }: { cycles: AgentCycleResult[] }) {
       {/* Totals */}
       <Box marginTop={1}>
         <Text bold>
-          Total: {cycles.length} cycles, $
-          {cycles.reduce((sum, c) => sum + c.costUsd, 0).toFixed(2)} spent,{" "}
+          Total: {cycles.length} cycles, ${cycles.reduce((sum, c) => sum + c.costUsd, 0).toFixed(2)} spent,{" "}
           {cycles.reduce((sum, c) => sum + c.ordersPlaced, 0)} orders
         </Text>
       </Box>

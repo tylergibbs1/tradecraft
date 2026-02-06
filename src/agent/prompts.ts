@@ -1,7 +1,7 @@
-import { RiskLimits } from "../config/schema.js";
-import { PortfolioState } from "../portfolio/types.js";
-import { RiskStatus } from "../risk/types.js";
 import type { AgentBacktestTrade } from "../backtest/agent-engine.js";
+import type { RiskLimits } from "../config/schema.js";
+import type { PortfolioState } from "../portfolio/types.js";
+import type { RiskStatus } from "../risk/types.js";
 
 export interface SystemPromptParams {
   tradingUniverse: string[];
@@ -9,11 +9,7 @@ export interface SystemPromptParams {
   riskLimits: RiskLimits;
 }
 
-export function buildSystemPrompt(
-  tradingUniverse: string[],
-  allowShorts: boolean,
-  riskLimits?: RiskLimits
-): string {
+export function buildSystemPrompt(tradingUniverse: string[], allowShorts: boolean, riskLimits?: RiskLimits): string {
   const limits = riskLimits ?? {
     maxPositionSize: 0.1,
     maxPositionCount: 10,
@@ -207,32 +203,23 @@ export function buildCyclePrompt(
   portfolio: PortfolioState,
   riskStatus: RiskStatus,
   recentTrades?: AgentBacktestTrade[],
-  memoryContext?: string
+  memoryContext?: string,
 ): string {
   const positions = Object.values(portfolio.positions);
   const positionsSummary = positions
     .map((p) => {
-      const pctOfPortfolio = portfolio.equity > 0
-        ? ((p.quantity * p.currentPrice) / portfolio.equity * 100).toFixed(1)
-        : "0.0";
-      const pnlPct = p.averageCost > 0
-        ? (((p.currentPrice - p.averageCost) / p.averageCost) * 100).toFixed(1)
-        : "0.0";
+      const pctOfPortfolio =
+        portfolio.equity > 0 ? (((p.quantity * p.currentPrice) / portfolio.equity) * 100).toFixed(1) : "0.0";
+      const pnlPct = p.averageCost > 0 ? (((p.currentPrice - p.averageCost) / p.averageCost) * 100).toFixed(1) : "0.0";
       return `  ${p.symbol}: ${p.quantity} shares | Cost: $${p.averageCost.toFixed(2)} | Now: $${p.currentPrice.toFixed(2)} | P&L: ${p.unrealizedPnL >= 0 ? "+" : ""}$${p.unrealizedPnL.toFixed(2)} (${pnlPct}%) | Weight: ${pctOfPortfolio}%`;
     })
     .join("\n");
 
-  const cashPct = portfolio.equity > 0
-    ? ((portfolio.cash / portfolio.equity) * 100).toFixed(1)
-    : "100.0";
+  const cashPct = portfolio.equity > 0 ? ((portfolio.cash / portfolio.equity) * 100).toFixed(1) : "100.0";
 
-  const dailyPnLPct = portfolio.equity > 0
-    ? ((portfolio.dailyPnL / portfolio.equity) * 100).toFixed(2)
-    : "0.00";
+  const dailyPnLPct = portfolio.equity > 0 ? ((portfolio.dailyPnL / portfolio.equity) * 100).toFixed(2) : "0.00";
 
-  const weeklyPnLPct = portfolio.equity > 0
-    ? ((portfolio.weeklyPnL / portfolio.equity) * 100).toFixed(2)
-    : "0.00";
+  const weeklyPnLPct = portfolio.equity > 0 ? ((portfolio.weeklyPnL / portfolio.equity) * 100).toFixed(2) : "0.00";
 
   // Determine portfolio status for quick assessment
   let portfolioStatus = "NORMAL";
@@ -248,22 +235,22 @@ export function buildCyclePrompt(
   let tradeHistorySection = "";
   if (recentTrades && recentTrades.length > 0) {
     const last15 = recentTrades.slice(-15);
-    const closingTrades = recentTrades.filter(t => t.pnl !== undefined);
-    const wins = closingTrades.filter(t => t.pnl! > 0).length;
-    const losses = closingTrades.filter(t => t.pnl! <= 0).length;
+    const closingTrades = recentTrades.filter((t) => t.pnl !== undefined);
+    const wins = closingTrades.filter((t) => t.pnl! > 0).length;
+    const losses = closingTrades.filter((t) => t.pnl! <= 0).length;
     const totalPnl = closingTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
 
     // Detect loss streak
     const recentClosing = closingTrades.slice(-5);
-    const recentLosses = recentClosing.filter(t => t.pnl! <= 0).length;
+    const recentLosses = recentClosing.filter((t) => t.pnl! <= 0).length;
     const onLossStreak = recentClosing.length >= 3 && recentLosses >= 3;
 
-    const tradeLines = last15.map(t => {
-      const pnlStr = t.pnl !== undefined
-        ? ` | P&L: ${t.pnl >= 0 ? "+" : ""}$${t.pnl.toFixed(2)}`
-        : "";
-      return `  [${t.date}] ${t.side.toUpperCase()} ${t.quantity} ${t.symbol} @ $${t.price.toFixed(2)}${pnlStr}`;
-    }).join("\n");
+    const tradeLines = last15
+      .map((t) => {
+        const pnlStr = t.pnl !== undefined ? ` | P&L: ${t.pnl >= 0 ? "+" : ""}$${t.pnl.toFixed(2)}` : "";
+        return `  [${t.date}] ${t.side.toUpperCase()} ${t.quantity} ${t.symbol} @ $${t.price.toFixed(2)}${pnlStr}`;
+      })
+      .join("\n");
 
     tradeHistorySection = `
 <recent_trades>
@@ -271,16 +258,18 @@ Last ${last15.length} trades (of ${recentTrades.length} total):
 ${tradeLines}
 
 Summary: ${wins} wins, ${losses} losses | Net P&L on closed trades: ${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}
-${onLossStreak ? "\n⚠️ WARNING: You are on a loss streak (" + recentLosses + " of last " + recentClosing.length + " trades were losses). REDUCE trading activity. Only trade with very high conviction and 2+ confirming signals. Holding cash is strongly preferred." : ""}
+${onLossStreak ? `\n⚠️ WARNING: You are on a loss streak (${recentLosses} of last ${recentClosing.length} trades were losses). REDUCE trading activity. Only trade with very high conviction and 2+ confirming signals. Holding cash is strongly preferred.` : ""}
 </recent_trades>
 `;
   }
 
-  const memorySection = memoryContext ? `
+  const memorySection = memoryContext
+    ? `
 <memory_context>
 ${memoryContext}
 </memory_context>
-` : "";
+`
+    : "";
 
   return `<cycle_start>
 This is a new trading cycle. Analyze the current state and decide on actions.

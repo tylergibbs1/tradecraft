@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { AttributionEngine } from "./engine.js";
+import type { AttributionEngine } from "./engine.js";
 
 const GetAttributionSchema = z.object({
   limit: z.number().int().min(1).max(50).optional().describe("Number of recent attributions (default: 10)"),
@@ -25,12 +25,12 @@ export function createAttributionTools(deps: { attributionEngine: AttributionEng
         return {
           success: true,
           count: attributions.length,
-          attributions: attributions.map(a => ({
+          attributions: attributions.map((a) => ({
             tradeId: a.tradeId,
             symbol: a.symbol,
             side: a.side,
             pnl: a.pnl,
-            signals: a.signals.map(s => ({
+            signals: a.signals.map((s) => ({
               agentRole: s.agentRole,
               signal: s.signal,
               confidence: s.confidence,
@@ -50,7 +50,7 @@ export function createAttributionTools(deps: { attributionEngine: AttributionEng
 
         return {
           success: true,
-          agents: performances.map(p => ({
+          agents: performances.map((p) => ({
             role: p.agentRole,
             totalSignals: p.totalSignals,
             accuracy: `${(p.accuracy * 100).toFixed(1)}%`,
@@ -59,7 +59,7 @@ export function createAttributionTools(deps: { attributionEngine: AttributionEng
             currentWeight: p.currentWeight,
             suggestedWeight: p.suggestedWeight,
           })),
-          recentAdjustments: history.map(a => ({
+          recentAdjustments: history.map((a) => ({
             role: a.agentRole,
             from: a.previousWeight,
             to: a.newWeight,

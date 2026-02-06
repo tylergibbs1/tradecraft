@@ -1,10 +1,10 @@
-import { DataManager, OHLCV } from "../data/index.js";
-import {
+import type { DataManager, OHLCV } from "../data/index.js";
+import type {
   BacktestConfig,
-  BacktestResult,
-  BacktestTrade,
   BacktestPosition,
+  BacktestResult,
   BacktestSnapshot,
+  BacktestTrade,
   Strategy,
 } from "./types.js";
 
@@ -46,12 +46,7 @@ export class BacktestEngine {
     });
   }
 
-  private executeBuy(
-    timestamp: number,
-    symbol: string,
-    quantity: number,
-    price: number
-  ): BacktestTrade | null {
+  private executeBuy(timestamp: number, symbol: string, quantity: number, price: number): BacktestTrade | null {
     // Apply slippage
     const executionPrice = price * (1 + this.config.slippage / 100);
     const value = quantity * executionPrice;
@@ -66,8 +61,7 @@ export class BacktestEngine {
     // Update position
     const existing = this.positions.get(symbol);
     if (existing) {
-      const totalCostBasis =
-        existing.averageCost * existing.quantity + executionPrice * quantity;
+      const totalCostBasis = existing.averageCost * existing.quantity + executionPrice * quantity;
       existing.quantity += quantity;
       existing.averageCost = totalCostBasis / existing.quantity;
       existing.currentPrice = executionPrice;
@@ -94,12 +88,7 @@ export class BacktestEngine {
     return trade;
   }
 
-  private executeSell(
-    timestamp: number,
-    symbol: string,
-    quantity: number,
-    price: number
-  ): BacktestTrade | null {
+  private executeSell(timestamp: number, symbol: string, quantity: number, price: number): BacktestTrade | null {
     const position = this.positions.get(symbol);
     if (!position || position.quantity < quantity) {
       return null;
@@ -142,12 +131,7 @@ export class BacktestEngine {
     const historyMap = new Map<string, OHLCV[]>();
 
     for (const symbol of this.config.symbols) {
-      const history = await this.dataManager.getHistory(
-        symbol,
-        "1d",
-        this.config.startDate,
-        this.config.endDate
-      );
+      const history = await this.dataManager.getHistory(symbol, "1d", this.config.startDate, this.config.endDate);
       historyMap.set(symbol, history);
     }
 
@@ -236,8 +220,7 @@ export class BacktestEngine {
     // Calculate trading days and annualized return
     const tradingDays = this.equityCurve.length;
     const yearsTraded = tradingDays / 252;
-    const annualizedReturn =
-      yearsTraded > 0 ? Math.pow(endEquity / startEquity, 1 / yearsTraded) - 1 : 0;
+    const annualizedReturn = yearsTraded > 0 ? (endEquity / startEquity) ** (1 / yearsTraded) - 1 : 0;
 
     // Calculate max drawdown
     let maxDrawdown = 0;
@@ -265,9 +248,7 @@ export class BacktestEngine {
 
     const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
     const variance =
-      returns.length > 0
-        ? returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
-        : 0;
+      returns.length > 0 ? returns.reduce((sum, r) => sum + (r - avgReturn) ** 2, 0) / returns.length : 0;
     const stdDev = Math.sqrt(variance);
     const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev) * Math.sqrt(252) : 0;
 
@@ -283,12 +264,10 @@ export class BacktestEngine {
     const profitFactor = totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? Infinity : 0;
 
     const averageWin = winningTrades.length > 0 ? totalWins / winningTrades.length : 0;
-    const averageLoss =
-      losingTrades.length > 0 ? totalLosses / losingTrades.length : 0;
+    const averageLoss = losingTrades.length > 0 ? totalLosses / losingTrades.length : 0;
 
     const largestWin = winningTrades.length > 0 ? Math.max(...winningTrades.map((t) => t.pnl!)) : 0;
-    const largestLoss =
-      losingTrades.length > 0 ? Math.abs(Math.min(...losingTrades.map((t) => t.pnl!))) : 0;
+    const largestLoss = losingTrades.length > 0 ? Math.abs(Math.min(...losingTrades.map((t) => t.pnl!))) : 0;
 
     return {
       config: this.config,

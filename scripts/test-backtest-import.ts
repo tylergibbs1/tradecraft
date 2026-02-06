@@ -1,4 +1,4 @@
-import { AgentBacktestEngine, type AgentBacktestConfig } from "../src/backtest/agent-engine.js";
+import { type AgentBacktestConfig, AgentBacktestEngine } from "../src/backtest/agent-engine.js";
 import { DataManager } from "../src/data/index.js";
 
 // Smoke test: construct backtest engine without running it.
@@ -23,6 +23,5 @@ const cfg: AgentBacktestConfig = {
   cycleFrequency: 5,
 };
 
-const engine = new AgentBacktestEngine("test-key", dataManager, cfg);
+const _engine = new AgentBacktestEngine("test-key", dataManager, cfg);
 console.log("AgentBacktestEngine constructed.");
-

@@ -5,45 +5,35 @@
  * psychology to identify sentiment extremes and shifts.
  */
 
-import {
-  ResearchAgent,
-  ResearchAgentDependencies,
-  ToolDefinition,
-} from '../base.js';
-import {
-  ResearchAgentConfig,
-  ResearchContext,
-  AgentSignal,
-  SignalStrength,
-  NewsItem,
-} from '../types.js';
-import { getNewsProvider, NewsDataProvider } from '../../data/providers/news.js';
+import { getNewsProvider, type NewsDataProvider } from "../../data/providers/news.js";
+import { ResearchAgent, type ResearchAgentDependencies, type ToolDefinition } from "../base.js";
+import type { AgentSignal, ResearchAgentConfig, ResearchContext, SignalStrength } from "../types.js";
 
 export class SentimentAnalyst extends ResearchAgent {
   private newsProvider: NewsDataProvider;
 
   constructor(
-    config: Omit<ResearchAgentConfig, 'role'>,
+    config: Omit<ResearchAgentConfig, "role">,
     deps: ResearchAgentDependencies & {
       newsProviderConfig?: { alphaVantageKey?: string; finnhubKey?: string };
-    }
+    },
   ) {
-    super({ ...config, role: 'sentiment-analyst' }, deps);
+    super({ ...config, role: "sentiment-analyst" }, deps);
     this.newsProvider = getNewsProvider(deps.newsProviderConfig);
   }
 
   protected getTools(): ToolDefinition[] {
     return [
       {
-        name: 'get_news',
-        description: 'Get recent news articles and sentiment for a symbol',
+        name: "get_news",
+        description: "Get recent news articles and sentiment for a symbol",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
-            limit: { type: 'number', description: 'Max articles to return (default 20)' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
+            limit: { type: "number", description: "Max articles to return (default 20)" },
           },
-          required: ['symbol'],
+          required: ["symbol"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
@@ -59,10 +49,10 @@ export class SentimentAnalyst extends ResearchAgent {
         },
       },
       {
-        name: 'get_market_sentiment',
-        description: 'Get overall market sentiment from major indices news',
+        name: "get_market_sentiment",
+        description: "Get overall market sentiment from major indices news",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {},
         },
         handler: async () => {
@@ -70,18 +60,18 @@ export class SentimentAnalyst extends ResearchAgent {
         },
       },
       {
-        name: 'analyze_headlines',
-        description: 'Analyze a list of headlines for sentiment themes',
+        name: "analyze_headlines",
+        description: "Analyze a list of headlines for sentiment themes",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
             headlines: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Headlines to analyze',
+              type: "array",
+              items: { type: "string" },
+              description: "Headlines to analyze",
             },
           },
-          required: ['headlines'],
+          required: ["headlines"],
         },
         handler: async (input: Record<string, unknown>) => {
           const headlines = input.headlines as string[];
@@ -142,10 +132,7 @@ After your analysis, provide a trading signal in this exact JSON format:
 Remember: Extreme sentiment often marks turning points. Be contrarian when appropriate.`;
   }
 
-  protected buildAnalysisPrompt(
-    symbol: string,
-    context: ResearchContext
-  ): string {
+  protected buildAnalysisPrompt(symbol: string, context: ResearchContext): string {
     let prompt = `Analyze sentiment for ${symbol} to identify sentiment extremes and potential contrarian opportunities.\n\n`;
 
     if (context.existingSignals && context.existingSignals.length > 0) {
@@ -153,7 +140,7 @@ Remember: Extreme sentiment often marks turning points. Be contrarian when appro
       for (const sig of context.existingSignals.slice(0, 3)) {
         prompt += `- ${sig.agentRole}: ${sig.signal} (${sig.confidence.toFixed(2)} confidence)\n`;
       }
-      prompt += '\nConsider whether sentiment aligns with or diverges from fundamental/technical views.\n\n';
+      prompt += "\nConsider whether sentiment aligns with or diverges from fundamental/technical views.\n\n";
     }
 
     prompt += `Steps:
@@ -176,9 +163,9 @@ Provide your signal in the JSON format specified. Remember that extreme sentimen
   protected parseSignals(
     symbol: string,
     response: string,
-    context: ResearchContext
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] {
-    const signals: Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] = [];
+    _context: ResearchContext,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] {
+    const signals: Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] = [];
 
     const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
     if (!jsonMatch) {
@@ -205,15 +192,15 @@ Provide your signal in the JSON format specified. Remember that extreme sentimen
 
   private createSignalFromParsed(
     symbol: string,
-    parsed: Record<string, unknown>
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'> {
+    parsed: Record<string, unknown>,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole"> {
     const data = parsed.data as Record<string, unknown> | undefined;
 
     return {
       symbol,
       signal: parsed.signal as SignalStrength,
       confidence: Math.max(0, Math.min(1, parsed.confidence as number)),
-      timeframe: (parsed.timeframe as 'day' | 'week') || 'week',
+      timeframe: (parsed.timeframe as "day" | "week") || "week",
       reasoning: parsed.reasoning as string,
       data: {
         ...data,
@@ -225,20 +212,20 @@ Provide your signal in the JSON format specified. Remember that extreme sentimen
   private analyzeHeadlines(headlines: string[]): Record<string, unknown> {
     const themes: Record<string, number> = {};
     const keywords = {
-      earnings: ['earnings', 'revenue', 'profit', 'eps', 'beat', 'miss'],
-      growth: ['growth', 'expand', 'increase', 'surge', 'jump', 'soar'],
-      decline: ['decline', 'fall', 'drop', 'plunge', 'crash', 'sink'],
-      acquisition: ['acquire', 'merger', 'buyout', 'deal', 'takeover'],
-      layoffs: ['layoff', 'cut', 'reduce', 'restructure', 'downsize'],
-      product: ['launch', 'release', 'announce', 'unveil', 'introduce'],
-      legal: ['lawsuit', 'sue', 'investigation', 'probe', 'regulatory'],
-      analyst: ['upgrade', 'downgrade', 'target', 'rating', 'analyst'],
+      earnings: ["earnings", "revenue", "profit", "eps", "beat", "miss"],
+      growth: ["growth", "expand", "increase", "surge", "jump", "soar"],
+      decline: ["decline", "fall", "drop", "plunge", "crash", "sink"],
+      acquisition: ["acquire", "merger", "buyout", "deal", "takeover"],
+      layoffs: ["layoff", "cut", "reduce", "restructure", "downsize"],
+      product: ["launch", "release", "announce", "unveil", "introduce"],
+      legal: ["lawsuit", "sue", "investigation", "probe", "regulatory"],
+      analyst: ["upgrade", "downgrade", "target", "rating", "analyst"],
     };
 
     for (const headline of headlines) {
       const lower = headline.toLowerCase();
       for (const [theme, words] of Object.entries(keywords)) {
-        if (words.some(word => lower.includes(word))) {
+        if (words.some((word) => lower.includes(word))) {
           themes[theme] = (themes[theme] || 0) + 1;
         }
       }
@@ -252,13 +239,13 @@ Provide your signal in the JSON format specified. Remember that extreme sentimen
     // Simple sentiment from keywords
     let positiveCount = 0;
     let negativeCount = 0;
-    const positiveWords = ['beat', 'surge', 'jump', 'soar', 'growth', 'expand', 'upgrade'];
-    const negativeWords = ['miss', 'decline', 'fall', 'drop', 'plunge', 'crash', 'downgrade', 'layoff'];
+    const positiveWords = ["beat", "surge", "jump", "soar", "growth", "expand", "upgrade"];
+    const negativeWords = ["miss", "decline", "fall", "drop", "plunge", "crash", "downgrade", "layoff"];
 
     for (const headline of headlines) {
       const lower = headline.toLowerCase();
-      if (positiveWords.some(w => lower.includes(w))) positiveCount++;
-      if (negativeWords.some(w => lower.includes(w))) negativeCount++;
+      if (positiveWords.some((w) => lower.includes(w))) positiveCount++;
+      if (negativeWords.some((w) => lower.includes(w))) negativeCount++;
     }
 
     return {
@@ -266,9 +253,7 @@ Provide your signal in the JSON format specified. Remember that extreme sentimen
       headlineCount: headlines.length,
       positiveHeadlines: positiveCount,
       negativeHeadlines: negativeCount,
-      sentimentSkew: headlines.length > 0
-        ? (positiveCount - negativeCount) / headlines.length
-        : 0,
+      sentimentSkew: headlines.length > 0 ? (positiveCount - negativeCount) / headlines.length : 0,
     };
   }
 }

@@ -27,7 +27,14 @@ export type TradingUniverse = z.infer<typeof TradingUniverseSchema>;
 
 // Agent parameters
 export const AgentParamsSchema = z.object({
-  model: z.enum(["claude-sonnet-4-5-20250929", "claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"]).default("claude-sonnet-4-5-20250929"),
+  model: z
+    .enum([
+      "claude-sonnet-4-5-20250929",
+      "claude-sonnet-4-20250514",
+      "claude-3-5-sonnet-20241022",
+      "claude-3-haiku-20240307",
+    ])
+    .default("claude-sonnet-4-5-20250929"),
   maxTurns: z.number().int().min(1).max(50).default(10),
   maxBudgetUsd: z.number().min(0).max(10).default(0.5),
   cycleIntervalMs: z.number().int().min(1000).default(60000), // 1 minute default
@@ -42,23 +49,25 @@ export type AgentMode = z.infer<typeof AgentModeSchema>;
 // Swarm parameters
 export const SwarmParamsSchema = z.object({
   specialistModel: z.string().default("claude-sonnet-4-5-20250929"),
-  weights: z.object({
-    "fundamental-analyst": z.number().min(0).max(1).default(0.25),
-    "earnings-analyst": z.number().min(0).max(1).default(0.20),
-    "technical-analyst": z.number().min(0).max(1).default(0.15),
-    "sentiment-analyst": z.number().min(0).max(1).default(0.10),
-    "macro-analyst": z.number().min(0).max(1).default(0.15),
-    "catalyst-analyst": z.number().min(0).max(1).default(0.10),
-    "hypothesis-generator": z.number().min(0).max(1).default(0.05),
-  }).default({
-    "fundamental-analyst": 0.25,
-    "earnings-analyst": 0.20,
-    "technical-analyst": 0.15,
-    "sentiment-analyst": 0.10,
-    "macro-analyst": 0.15,
-    "catalyst-analyst": 0.10,
-    "hypothesis-generator": 0.05,
-  }),
+  weights: z
+    .object({
+      "fundamental-analyst": z.number().min(0).max(1).default(0.25),
+      "earnings-analyst": z.number().min(0).max(1).default(0.2),
+      "technical-analyst": z.number().min(0).max(1).default(0.15),
+      "sentiment-analyst": z.number().min(0).max(1).default(0.1),
+      "macro-analyst": z.number().min(0).max(1).default(0.15),
+      "catalyst-analyst": z.number().min(0).max(1).default(0.1),
+      "hypothesis-generator": z.number().min(0).max(1).default(0.05),
+    })
+    .default({
+      "fundamental-analyst": 0.25,
+      "earnings-analyst": 0.2,
+      "technical-analyst": 0.15,
+      "sentiment-analyst": 0.1,
+      "macro-analyst": 0.15,
+      "catalyst-analyst": 0.1,
+      "hypothesis-generator": 0.05,
+    }),
   parallelSpecialists: z.boolean().default(true),
   minConsensusConfidence: z.number().min(0).max(1).default(0.5),
 });
@@ -107,11 +116,11 @@ const defaultSwarmParams: SwarmParams = {
   specialistModel: "claude-sonnet-4-5-20250929",
   weights: {
     "fundamental-analyst": 0.25,
-    "earnings-analyst": 0.20,
+    "earnings-analyst": 0.2,
     "technical-analyst": 0.15,
-    "sentiment-analyst": 0.10,
+    "sentiment-analyst": 0.1,
     "macro-analyst": 0.15,
-    "catalyst-analyst": 0.10,
+    "catalyst-analyst": 0.1,
     "hypothesis-generator": 0.05,
   },
   parallelSpecialists: true,

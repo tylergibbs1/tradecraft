@@ -7,23 +7,13 @@
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { Config } from "../config/index.js";
-import { PortfolioManager } from "../portfolio/manager.js";
-import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
-import { DataManager, Quote } from "../data/index.js";
-import {
-  PortfolioManagerAgent,
-  SwarmCycleResult,
-  TradeDecision,
-  createSwarm,
-} from "../agents/portfolio-manager.js";
-import { AgentCycleContext } from "../agents/types.js";
-import {
-  ITradingAgent,
-  AgentState,
-  AgentMessage,
-  AgentCycleResult,
-} from "./types.js";
+import { createSwarm, type PortfolioManagerAgent, type TradeDecision } from "../agents/portfolio-manager.js";
+import type { AgentCycleContext } from "../agents/types.js";
+import type { Config } from "../config/index.js";
+import type { DataManager } from "../data/index.js";
+import type { PortfolioManager } from "../portfolio/manager.js";
+import type { PortfolioSnapshot, RiskMonitor } from "../risk/monitor.js";
+import type { AgentCycleResult, AgentMessage, AgentState, ITradingAgent } from "./types.js";
 
 export interface SwarmAgentCallbacks {
   onStateChange?: (state: AgentState) => void;
@@ -67,7 +57,7 @@ export class SwarmTradingAgent implements ITradingAgent {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
         const bars = await deps.dataManager.getHistory(symbol, "1d", startDate, endDate);
-        return bars.map(b => ({
+        return bars.map((b) => ({
           timestamp: b.timestamp,
           open: b.open,
           high: b.high,
@@ -168,12 +158,12 @@ export class SwarmTradingAgent implements ITradingAgent {
 
     try {
       // Build cycle context
-      const portfolioState = this.deps.portfolioManager.getState();
+      const _portfolioState = this.deps.portfolioManager.getState();
       const positions = this.deps.portfolioManager.getPositions();
 
       // Update prices
       if (positions.length > 0) {
-        const quotes = await this.deps.dataManager.getQuotes(positions.map(p => p.symbol));
+        const quotes = await this.deps.dataManager.getQuotes(positions.map((p) => p.symbol));
         this.deps.portfolioManager.updatePrices(quotes);
       }
 
@@ -222,8 +212,9 @@ export class SwarmTradingAgent implements ITradingAgent {
 
       // Report specialist results
       for (const sr of swarmResult.specialistResults) {
-        this.emitMessage("assistant",
-          `[${sr.role}] Analyzed ${sr.symbolsAnalyzed.join(",")} — ${sr.signalsPublished} signals (${sr.tokensUsed} tokens)`
+        this.emitMessage(
+          "assistant",
+          `[${sr.role}] Analyzed ${sr.symbolsAnalyzed.join(",")} — ${sr.signalsPublished} signals (${sr.tokensUsed} tokens)`,
         );
       }
 
@@ -251,8 +242,9 @@ export class SwarmTradingAgent implements ITradingAgent {
       };
 
       this.callbacks.onCycleComplete?.(agentResult);
-      this.emitMessage("system",
-        `Swarm cycle complete: ${ordersPlaced} orders, ${swarmResult.tradeDecisions.length} decisions, $${swarmResult.totalCostUsd.toFixed(4)}`
+      this.emitMessage(
+        "system",
+        `Swarm cycle complete: ${ordersPlaced} orders, ${swarmResult.tradeDecisions.length} decisions, $${swarmResult.totalCostUsd.toFixed(4)}`,
       );
 
       return agentResult;
@@ -284,7 +276,7 @@ export class SwarmTradingAgent implements ITradingAgent {
 
       // Risk validation
       const positions = this.deps.portfolioManager.getPositions();
-      const quotes = await this.deps.dataManager.getQuotes(positions.map(p => p.symbol));
+      const quotes = await this.deps.dataManager.getQuotes(positions.map((p) => p.symbol));
       this.deps.portfolioManager.updatePrices(quotes);
 
       const state = this.deps.portfolioManager.getState();
@@ -307,11 +299,11 @@ export class SwarmTradingAgent implements ITradingAgent {
         peakEquity: state.peakEquity,
       };
 
-      const side = decision.action === "BUY" ? "buy" as const : "sell" as const;
+      const side = decision.action === "BUY" ? ("buy" as const) : ("sell" as const);
       const validation = this.deps.riskMonitor.preValidate(
         { symbol: decision.symbol, side, type: "market", quantity: decision.quantity },
         snapshot,
-        quote.last
+        quote.last,
       );
 
       if (!validation.valid) {
@@ -320,9 +312,7 @@ export class SwarmTradingAgent implements ITradingAgent {
       }
 
       // Execute
-      const order = this.deps.portfolioManager.createOrder(
-        decision.symbol, side, "market", decision.quantity
-      );
+      const order = this.deps.portfolioManager.createOrder(decision.symbol, side, "market", decision.quantity);
       this.deps.portfolioManager.submitOrder(order.id);
 
       const fillPrice = side === "buy" ? (quote.ask ?? quote.last) : (quote.bid ?? quote.last);
@@ -330,8 +320,9 @@ export class SwarmTradingAgent implements ITradingAgent {
 
       if (fillResult) {
         this.deps.riskMonitor.recordTradeSuccess();
-        this.emitMessage("tool_result",
-          `${side.toUpperCase()} ${decision.quantity} ${decision.symbol} @ $${fillPrice.toFixed(2)} — ${decision.reason.slice(0, 100)}`
+        this.emitMessage(
+          "tool_result",
+          `${side.toUpperCase()} ${decision.quantity} ${decision.symbol} @ $${fillPrice.toFixed(2)} — ${decision.reason.slice(0, 100)}`,
         );
         return true;
       }

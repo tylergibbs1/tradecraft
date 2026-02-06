@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useCallback } from "react";
 import { Box, useApp, useInput } from "ink";
-import { Header } from "./components/Header.js";
-import { Footer } from "./components/Footer.js";
-import { Portfolio } from "./components/Portfolio.js";
-import { Trades } from "./components/Trades.js";
-import { Journal } from "./components/Journal.js";
-import { AgentLog } from "./components/AgentLog.js";
-import { TradingAgent, AgentState, AgentMessage, AgentCycleResult } from "../agent/index.js";
-import { ITradingAgent } from "../agent/types.js";
+import { useCallback, useEffect, useState } from "react";
+import { type AgentCycleResult, type AgentMessage, type AgentState, TradingAgent } from "../agent/index.js";
 import { SwarmTradingAgent } from "../agent/swarm-adapter.js";
+import type { ITradingAgent } from "../agent/types.js";
+import type { Config } from "../config/index.js";
+import { DataManager } from "../data/index.js";
 import { PortfolioManager } from "../portfolio/manager.js";
 import { RiskMonitor } from "../risk/monitor.js";
-import { DataManager } from "../data/index.js";
-import { Config } from "../config/index.js";
+import { AgentLog } from "./components/AgentLog.js";
+import { Footer } from "./components/Footer.js";
+import { Header } from "./components/Header.js";
+import { Journal } from "./components/Journal.js";
+import { Portfolio } from "./components/Portfolio.js";
+import { Trades } from "./components/Trades.js";
 
 interface AppProps {
   config: Config;
@@ -73,7 +73,7 @@ export function App({ config }: AppProps) {
   }, [managers.portfolioManager]);
 
   // Handle keyboard input
-  useInput((input, key) => {
+  useInput((input, _key) => {
     // Tab navigation
     if (input === "1") setActiveTab(0);
     else if (input === "2") setActiveTab(1);
@@ -100,12 +100,7 @@ export function App({ config }: AppProps) {
   const renderTab = useCallback(() => {
     switch (activeTab) {
       case 0:
-        return (
-          <Portfolio
-            portfolio={portfolioState}
-            equityHistory={equityHistory}
-          />
-        );
+        return <Portfolio portfolio={portfolioState} equityHistory={equityHistory} />;
       case 1:
         return (
           <Trades
@@ -114,16 +109,9 @@ export function App({ config }: AppProps) {
           />
         );
       case 2:
-        return (
-          <Journal trades={managers.portfolioManager.getTrades()} />
-        );
+        return <Journal trades={managers.portfolioManager.getTrades()} />;
       case 3:
-        return (
-          <AgentLog
-            messages={messages}
-            cycleResults={cycleResults}
-          />
-        );
+        return <AgentLog messages={messages} cycleResults={cycleResults} />;
       default:
         return null;
     }

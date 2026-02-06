@@ -1,6 +1,6 @@
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
-import { Trade } from "../../portfolio/types.js";
+import { useState } from "react";
+import type { Trade } from "../../portfolio/types.js";
 
 interface JournalProps {
   trades: Trade[];
@@ -16,7 +16,7 @@ interface DailySummary {
 
 function formatCurrency(value: number): string {
   const sign = value >= 0 ? "+" : "";
-  return sign + "$" + Math.abs(value).toFixed(2);
+  return `${sign}$${Math.abs(value).toFixed(2)}`;
 }
 
 function groupByDate(trades: Trade[]): Map<string, Trade[]> {
@@ -53,11 +53,9 @@ function calculateDailySummaries(trades: Trade[]): DailySummary[] {
 export function Journal({ trades }: JournalProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const summaries = calculateDailySummaries(trades);
-  const selectedIndex = selectedDate
-    ? summaries.findIndex((s) => s.date === selectedDate)
-    : 0;
+  const selectedIndex = selectedDate ? summaries.findIndex((s) => s.date === selectedDate) : 0;
 
-  useInput((input, key) => {
+  useInput((_input, key) => {
     if (key.upArrow && selectedIndex > 0) {
       setSelectedDate(summaries[selectedIndex - 1]?.date ?? null);
     } else if (key.downArrow && selectedIndex < summaries.length - 1) {
@@ -90,9 +88,7 @@ export function Journal({ trades }: JournalProps) {
       <Box marginBottom={1}>
         <Box flexDirection="column" marginRight={4}>
           <Text bold>Total P&L</Text>
-          <Text color={totalPnL >= 0 ? "green" : "red"}>
-            {formatCurrency(totalPnL)}
-          </Text>
+          <Text color={totalPnL >= 0 ? "green" : "red"}>{formatCurrency(totalPnL)}</Text>
         </Box>
         <Box flexDirection="column" marginRight={4}>
           <Text bold>Total Trades</Text>
@@ -104,9 +100,7 @@ export function Journal({ trades }: JournalProps) {
         </Box>
         <Box flexDirection="column">
           <Text bold>Win Rate</Text>
-          <Text>
-            {totalWithPnL > 0 ? ((wins / totalWithPnL) * 100).toFixed(1) : 0}%
-          </Text>
+          <Text>{totalWithPnL > 0 ? ((wins / totalWithPnL) * 100).toFixed(1) : 0}%</Text>
         </Box>
       </Box>
 
@@ -130,14 +124,12 @@ export function Journal({ trades }: JournalProps) {
         {summaries.slice(0, 15).map((summary, i) => (
           <Box key={summary.date}>
             <Text color={i === selectedIndex ? "cyan" : undefined}>
-              {(i === selectedIndex ? "❯ " : "  ")}
+              {i === selectedIndex ? "❯ " : "  "}
               {summary.date.padEnd(12)}
               {summary.trades.toString().padStart(8)}
-              {"$" + summary.volume.toLocaleString().padStart(13)}
+              {`$${summary.volume.toLocaleString().padStart(13)}`}
             </Text>
-            <Text color={summary.pnl >= 0 ? "green" : "red"}>
-              {formatCurrency(summary.pnl).padStart(12)}
-            </Text>
+            <Text color={summary.pnl >= 0 ? "green" : "red"}>{formatCurrency(summary.pnl).padStart(12)}</Text>
             <Text color={i === selectedIndex ? "cyan" : undefined}>
               {(summary.winRate * 100).toFixed(0).padStart(9)}%
             </Text>
@@ -159,8 +151,7 @@ export function Journal({ trades }: JournalProps) {
                 <Text key={trade.id}>
                   {trade.side.toUpperCase().padEnd(5)}
                   {trade.symbol.padEnd(8)}
-                  {trade.quantity.toString().padStart(6)} @{" "}
-                  ${trade.price.toFixed(2)}
+                  {trade.quantity.toString().padStart(6)} @ ${trade.price.toFixed(2)}
                   {trade.pnl !== undefined && (
                     <Text color={trade.pnl >= 0 ? "green" : "red"}>
                       {" → "}

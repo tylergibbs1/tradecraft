@@ -1,7 +1,7 @@
-import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
-import { PortfolioManager } from "../portfolio/manager.js";
-import { DataManager } from "../data/index.js";
-import { AgentState } from "./types.js";
+import type { DataManager } from "../data/index.js";
+import type { PortfolioManager } from "../portfolio/manager.js";
+import type { PortfolioSnapshot, RiskMonitor } from "../risk/monitor.js";
+import type { AgentState } from "./types.js";
 
 export interface CanUseToolContext {
   riskMonitor: RiskMonitor;
@@ -38,11 +38,7 @@ export function createCanUseTool(ctx: CanUseToolContext) {
 
     if (agentState.current === "paused") {
       // Allow read-only tools when paused
-      if (
-        tool === "get_market_data" ||
-        tool === "get_portfolio" ||
-        tool === "get_risk_status"
-      ) {
+      if (tool === "get_market_data" || tool === "get_portfolio" || tool === "get_risk_status") {
         return { allowed: true };
       }
       return {
@@ -111,7 +107,7 @@ export function createCanUseTool(ctx: CanUseToolContext) {
             stopPrice: input.stopPrice as number | undefined,
           },
           snapshot,
-          quote.last
+          quote.last,
         );
 
         if (!validation.valid) {

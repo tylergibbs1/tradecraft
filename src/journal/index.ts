@@ -1,6 +1,6 @@
-import * as fs from "fs";
-import * as path from "path";
-import { Trade } from "../portfolio/types.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { Trade } from "../portfolio/types.js";
 
 const LOGS_DIR = path.join(process.cwd(), "logs");
 const JOURNAL_FILE = path.join(LOGS_DIR, "trades.jsonl");
@@ -44,7 +44,7 @@ export function recordTrade(trade: Trade): void {
     data: trade,
   };
 
-  fs.appendFileSync(JOURNAL_FILE, JSON.stringify(entry) + "\n");
+  fs.appendFileSync(JOURNAL_FILE, `${JSON.stringify(entry)}\n`);
 }
 
 /**
@@ -63,7 +63,7 @@ export function addNote(content: string, symbol?: string, tags?: string[]): void
     },
   };
 
-  fs.appendFileSync(JOURNAL_FILE, JSON.stringify(entry) + "\n");
+  fs.appendFileSync(JOURNAL_FILE, `${JSON.stringify(entry)}\n`);
 }
 
 /**
@@ -78,7 +78,7 @@ export function recordAnalysis(analysis: AnalysisEntry): void {
     data: analysis,
   };
 
-  fs.appendFileSync(JOURNAL_FILE, JSON.stringify(entry) + "\n");
+  fs.appendFileSync(JOURNAL_FILE, `${JSON.stringify(entry)}\n`);
 }
 
 /**
@@ -166,8 +166,7 @@ export function getTradeStats(): {
     winRate: trades.length > 0 ? winningTrades.length / trades.length : 0,
     averagePnL: trades.length > 0 ? totalPnL / trades.length : 0,
     largestWin: winningTrades.length > 0 ? Math.max(...winningTrades.map((t) => t.pnl!)) : 0,
-    largestLoss:
-      losingTrades.length > 0 ? Math.abs(Math.min(...losingTrades.map((t) => t.pnl!))) : 0,
+    largestLoss: losingTrades.length > 0 ? Math.abs(Math.min(...losingTrades.map((t) => t.pnl!))) : 0,
   };
 }
 
@@ -176,15 +175,11 @@ export function getTradeStats(): {
  */
 export function exportToCSV(outputPath: string): void {
   const entries = readJournal();
-  const trades = entries
-    .filter((e) => e.type === "trade")
-    .map((e) => e.data as Trade);
+  const trades = entries.filter((e) => e.type === "trade").map((e) => e.data as Trade);
 
-  const header =
-    "timestamp,symbol,side,quantity,price,value,commission,pnl";
+  const header = "timestamp,symbol,side,quantity,price,value,commission,pnl";
   const rows = trades.map(
-    (t) =>
-      `${t.executedAt},${t.symbol},${t.side},${t.quantity},${t.price},${t.value},${t.commission},${t.pnl ?? ""}`
+    (t) => `${t.executedAt},${t.symbol},${t.side},${t.quantity},${t.price},${t.value},${t.commission},${t.pnl ?? ""}`,
   );
 
   fs.writeFileSync(outputPath, [header, ...rows].join("\n"));

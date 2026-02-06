@@ -5,64 +5,51 @@
  * insights about business quality, financial health, and growth.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import {
-  ResearchAgent,
-  ResearchAgentDependencies,
-  ToolDefinition,
-} from '../base.js';
-import {
-  ResearchAgentConfig,
-  ResearchContext,
-  AgentSignal,
-  SignalStrength,
-  FinancialMetrics,
-} from '../types.js';
-import { getEdgarProvider, EdgarDataProvider } from '../../data/providers/edgar.js';
+import { type EdgarDataProvider, getEdgarProvider } from "../../data/providers/edgar.js";
+import { ResearchAgent, type ResearchAgentDependencies, type ToolDefinition } from "../base.js";
+import type { AgentSignal, ResearchAgentConfig, ResearchContext, SignalStrength } from "../types.js";
 
 export class FundamentalAnalyst extends ResearchAgent {
   private edgar: EdgarDataProvider;
 
-  constructor(
-    config: Omit<ResearchAgentConfig, 'role'>,
-    deps: ResearchAgentDependencies
-  ) {
-    super({ ...config, role: 'fundamental-analyst' }, deps);
+  constructor(config: Omit<ResearchAgentConfig, "role">, deps: ResearchAgentDependencies) {
+    super({ ...config, role: "fundamental-analyst" }, deps);
     this.edgar = getEdgarProvider();
   }
 
   protected getTools(): ToolDefinition[] {
     return [
       {
-        name: 'get_10k_sections',
-        description: 'Get specific sections from the most recent 10-K filing. Sections: business (company overview), risk_factors (key risks), mda (management discussion & analysis)',
+        name: "get_10k_sections",
+        description:
+          "Get specific sections from the most recent 10-K filing. Sections: business (company overview), risk_factors (key risks), mda (management discussion & analysis)",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
             sections: {
-              type: 'array',
-              items: { type: 'string', enum: ['business', 'risk_factors', 'mda'] },
-              description: 'Sections to retrieve',
+              type: "array",
+              items: { type: "string", enum: ["business", "risk_factors", "mda"] },
+              description: "Sections to retrieve",
             },
           },
-          required: ['symbol', 'sections'],
+          required: ["symbol", "sections"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
-          const sections = input.sections as ('business' | 'risk_factors' | 'mda')[];
+          const sections = input.sections as ("business" | "risk_factors" | "mda")[];
           return this.edgar.get10KSections(symbol, sections);
         },
       },
       {
-        name: 'get_financial_metrics',
-        description: 'Get key financial metrics from SEC filings (revenue, margins, ratios, etc.)',
+        name: "get_financial_metrics",
+        description: "Get key financial metrics from SEC filings (revenue, margins, ratios, etc.)",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
           },
-          required: ['symbol'],
+          required: ["symbol"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
@@ -70,20 +57,20 @@ export class FundamentalAnalyst extends ResearchAgent {
         },
       },
       {
-        name: 'get_recent_filings',
-        description: 'List recent SEC filings for a company',
+        name: "get_recent_filings",
+        description: "List recent SEC filings for a company",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
             formTypes: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Filter by form types (e.g., 10-K, 10-Q, 8-K)',
+              type: "array",
+              items: { type: "string" },
+              description: "Filter by form types (e.g., 10-K, 10-Q, 8-K)",
             },
-            limit: { type: 'number', description: 'Max filings to return' },
+            limit: { type: "number", description: "Max filings to return" },
           },
-          required: ['symbol'],
+          required: ["symbol"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
@@ -148,10 +135,7 @@ After your analysis, provide a trading signal in this exact JSON format:
 Be rigorous and skeptical. Focus on facts from the filings, not speculation. A HOLD signal is appropriate when the picture is unclear.`;
   }
 
-  protected buildAnalysisPrompt(
-    symbol: string,
-    context: ResearchContext
-  ): string {
+  protected buildAnalysisPrompt(symbol: string, context: ResearchContext): string {
     let prompt = `Analyze ${symbol} using its SEC filings to determine investment merit.\n\n`;
 
     // Include existing signals from other agents for context
@@ -160,7 +144,7 @@ Be rigorous and skeptical. Focus on facts from the filings, not speculation. A H
       for (const sig of context.existingSignals.slice(0, 3)) {
         prompt += `- ${sig.agentRole}: ${sig.signal} (${sig.confidence.toFixed(2)} confidence) - ${sig.reasoning.slice(0, 100)}\n`;
       }
-      prompt += '\n';
+      prompt += "\n";
     }
 
     prompt += `Steps:
@@ -182,9 +166,9 @@ Provide your signal in the JSON format specified.`;
   protected parseSignals(
     symbol: string,
     response: string,
-    context: ResearchContext
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] {
-    const signals: Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] = [];
+    _context: ResearchContext,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] {
+    const signals: Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] = [];
 
     // Extract JSON from response
     const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
@@ -215,14 +199,14 @@ Provide your signal in the JSON format specified.`;
 
   private createSignalFromParsed(
     symbol: string,
-    parsed: Record<string, unknown>
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'> {
+    parsed: Record<string, unknown>,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole"> {
     return {
       symbol,
-      signal: (parsed.signal as SignalStrength) || 'HOLD',
+      signal: (parsed.signal as SignalStrength) || "HOLD",
       confidence: Math.max(0, Math.min(1, (parsed.confidence as number) || 0.5)),
-      timeframe: (parsed.timeframe as 'month' | 'quarter') || 'quarter',
-      reasoning: (parsed.reasoning as string) || 'Analysis complete',
+      timeframe: (parsed.timeframe as "month" | "quarter") || "quarter",
+      reasoning: (parsed.reasoning as string) || "Analysis complete",
       thesis: parsed.thesis as string | undefined,
       catalysts: parsed.catalysts as string[] | undefined,
       risks: parsed.risks as string[] | undefined,

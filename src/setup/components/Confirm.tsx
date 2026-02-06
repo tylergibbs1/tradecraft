@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import { useState } from "react";
 
 interface ConfirmProps {
   message: string;
@@ -7,11 +7,7 @@ interface ConfirmProps {
   onConfirm: (confirmed: boolean) => void;
 }
 
-export function Confirm({
-  message,
-  defaultValue = true,
-  onConfirm,
-}: ConfirmProps) {
+export function Confirm({ message, defaultValue = true, onConfirm }: ConfirmProps) {
   const [selected, setSelected] = useState(defaultValue);
 
   useInput((input, key) => {
@@ -32,13 +28,9 @@ export function Confirm({
     <Box flexDirection="column">
       <Text>{message}</Text>
       <Box marginTop={1}>
-        <Text color={selected ? "green" : "gray"}>
-          {selected ? "❯ " : "  "}Yes
-        </Text>
+        <Text color={selected ? "green" : "gray"}>{selected ? "❯ " : "  "}Yes</Text>
         <Text> / </Text>
-        <Text color={!selected ? "red" : "gray"}>
-          {!selected ? "❯ " : "  "}No
-        </Text>
+        <Text color={!selected ? "red" : "gray"}>{!selected ? "❯ " : "  "}No</Text>
       </Box>
       <Box marginTop={1}>
         <Text color="gray">←→ or y/n to select, Enter to confirm</Text>

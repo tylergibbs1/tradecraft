@@ -5,18 +5,8 @@
  * volume to identify entry/exit points and trend direction.
  */
 
-import {
-  ResearchAgent,
-  ResearchAgentDependencies,
-  ToolDefinition,
-} from '../base.js';
-import {
-  ResearchAgentConfig,
-  ResearchContext,
-  AgentSignal,
-  SignalStrength,
-  PriceBar,
-} from '../types.js';
+import { ResearchAgent, type ResearchAgentDependencies, type ToolDefinition } from "../base.js";
+import type { AgentSignal, PriceBar, ResearchAgentConfig, ResearchContext, SignalStrength } from "../types.js";
 
 interface TechnicalIndicators {
   sma20: number;
@@ -30,34 +20,34 @@ interface TechnicalIndicators {
   priceChange: { day: number; week: number; month: number };
   support: number;
   resistance: number;
-  trend: 'bullish' | 'bearish' | 'neutral';
+  trend: "bullish" | "bearish" | "neutral";
 }
 
 export class TechnicalAnalyst extends ResearchAgent {
   private priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
 
   constructor(
-    config: Omit<ResearchAgentConfig, 'role'>,
+    config: Omit<ResearchAgentConfig, "role">,
     deps: ResearchAgentDependencies & {
       priceDataFetcher: (symbol: string, days: number) => Promise<PriceBar[]>;
-    }
+    },
   ) {
-    super({ ...config, role: 'technical-analyst' }, deps);
+    super({ ...config, role: "technical-analyst" }, deps);
     this.priceDataFetcher = deps.priceDataFetcher;
   }
 
   protected getTools(): ToolDefinition[] {
     return [
       {
-        name: 'get_technical_indicators',
-        description: 'Calculate technical indicators for a symbol (SMA, RSI, MACD, Bollinger Bands, etc.)',
+        name: "get_technical_indicators",
+        description: "Calculate technical indicators for a symbol (SMA, RSI, MACD, Bollinger Bands, etc.)",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
-            days: { type: 'number', description: 'Days of history to analyze (default 200)' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
+            days: { type: "number", description: "Days of history to analyze (default 200)" },
           },
-          required: ['symbol'],
+          required: ["symbol"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
@@ -67,15 +57,15 @@ export class TechnicalAnalyst extends ResearchAgent {
         },
       },
       {
-        name: 'get_price_history',
-        description: 'Get raw price history for custom analysis',
+        name: "get_price_history",
+        description: "Get raw price history for custom analysis",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
-            days: { type: 'number', description: 'Days of history' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
+            days: { type: "number", description: "Days of history" },
           },
-          required: ['symbol'],
+          required: ["symbol"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
@@ -85,14 +75,14 @@ export class TechnicalAnalyst extends ResearchAgent {
         },
       },
       {
-        name: 'identify_patterns',
-        description: 'Identify chart patterns (support/resistance, trends, reversals)',
+        name: "identify_patterns",
+        description: "Identify chart patterns (support/resistance, trends, reversals)",
         inputSchema: {
-          type: 'object',
+          type: "object",
           properties: {
-            symbol: { type: 'string', description: 'Stock ticker symbol' },
+            symbol: { type: "string", description: "Stock ticker symbol" },
           },
-          required: ['symbol'],
+          required: ["symbol"],
         },
         handler: async (input: Record<string, unknown>) => {
           const symbol = input.symbol as string;
@@ -157,10 +147,7 @@ After your analysis, provide a trading signal in this exact JSON format:
 Focus on actionable signals with clear risk/reward. A HOLD is appropriate when the setup is unclear or risk/reward is unfavorable.`;
   }
 
-  protected buildAnalysisPrompt(
-    symbol: string,
-    context: ResearchContext
-  ): string {
+  protected buildAnalysisPrompt(symbol: string, context: ResearchContext): string {
     let prompt = `Analyze ${symbol} from a technical perspective to identify trading opportunities.\n\n`;
 
     if (context.currentPrice) {
@@ -172,7 +159,7 @@ Focus on actionable signals with clear risk/reward. A HOLD is appropriate when t
       for (const sig of context.existingSignals.slice(0, 3)) {
         prompt += `- ${sig.agentRole}: ${sig.signal} (${sig.confidence.toFixed(2)} confidence)\n`;
       }
-      prompt += '\n';
+      prompt += "\n";
     }
 
     prompt += `Steps:
@@ -194,9 +181,9 @@ Provide your signal in the JSON format specified.`;
   protected parseSignals(
     symbol: string,
     response: string,
-    context: ResearchContext
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] {
-    const signals: Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'>[] = [];
+    _context: ResearchContext,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] {
+    const signals: Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole">[] = [];
 
     const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
     if (!jsonMatch) {
@@ -223,14 +210,14 @@ Provide your signal in the JSON format specified.`;
 
   private createSignalFromParsed(
     symbol: string,
-    parsed: Record<string, unknown>
-  ): Omit<AgentSignal, 'id' | 'timestamp' | 'agentId' | 'agentRole'> {
+    parsed: Record<string, unknown>,
+  ): Omit<AgentSignal, "id" | "timestamp" | "agentId" | "agentRole"> {
     return {
       symbol,
-      signal: (parsed.signal as SignalStrength) || 'HOLD',
+      signal: (parsed.signal as SignalStrength) || "HOLD",
       confidence: Math.max(0, Math.min(1, (parsed.confidence as number) || 0.5)),
-      timeframe: (parsed.timeframe as 'day' | 'week') || 'week',
-      reasoning: (parsed.reasoning as string) || 'Technical analysis complete',
+      timeframe: (parsed.timeframe as "day" | "week") || "week",
+      reasoning: (parsed.reasoning as string) || "Technical analysis complete",
       priceTarget: parsed.priceTarget as number | undefined,
       stopLoss: parsed.stopLoss as number | undefined,
       data: parsed.data as Record<string, unknown> | undefined,
@@ -240,10 +227,10 @@ Provide your signal in the JSON format specified.`;
   private calculateIndicators(prices: PriceBar[]): TechnicalIndicators | null {
     if (prices.length < 50) return null;
 
-    const closes = prices.map(p => p.close);
-    const highs = prices.map(p => p.high);
-    const lows = prices.map(p => p.low);
-    const volumes = prices.map(p => p.volume);
+    const closes = prices.map((p) => p.close);
+    const highs = prices.map((p) => p.high);
+    const lows = prices.map((p) => p.low);
+    const volumes = prices.map((p) => p.volume);
 
     const current = closes[closes.length - 1]!;
     const prevClose = closes[closes.length - 2]!;
@@ -282,11 +269,11 @@ Provide your signal in the JSON format specified.`;
     const resistance = Math.max(...recentHighs);
 
     // Trend determination
-    let trend: 'bullish' | 'bearish' | 'neutral' = 'neutral';
+    let trend: "bullish" | "bearish" | "neutral" = "neutral";
     if (current > sma20 && sma20 > sma50 && (prices.length < 200 || sma50 > sma200)) {
-      trend = 'bullish';
+      trend = "bullish";
     } else if (current < sma20 && sma20 < sma50 && (prices.length < 200 || sma50 < sma200)) {
-      trend = 'bearish';
+      trend = "bearish";
     }
 
     return {
@@ -306,9 +293,9 @@ Provide your signal in the JSON format specified.`;
   }
 
   private identifyPatterns(prices: PriceBar[]): Record<string, unknown> {
-    const closes = prices.map(p => p.close);
-    const highs = prices.map(p => p.high);
-    const lows = prices.map(p => p.low);
+    const closes = prices.map((p) => p.close);
+    const highs = prices.map((p) => p.high);
+    const lows = prices.map((p) => p.low);
 
     const current = closes[closes.length - 1];
     const patterns: string[] = [];
@@ -319,14 +306,12 @@ Provide your signal in the JSON format specified.`;
     const olderHighs = highs.slice(-20, -10);
     const olderLows = lows.slice(-20, -10);
 
-    if (Math.max(...recentHighs) > Math.max(...olderHighs) &&
-        Math.min(...recentLows) > Math.min(...olderLows)) {
-      patterns.push('Higher highs and higher lows (uptrend)');
+    if (Math.max(...recentHighs) > Math.max(...olderHighs) && Math.min(...recentLows) > Math.min(...olderLows)) {
+      patterns.push("Higher highs and higher lows (uptrend)");
     }
 
-    if (Math.max(...recentHighs) < Math.max(...olderHighs) &&
-        Math.min(...recentLows) < Math.min(...olderLows)) {
-      patterns.push('Lower highs and lower lows (downtrend)');
+    if (Math.max(...recentHighs) < Math.max(...olderHighs) && Math.min(...recentLows) < Math.min(...olderLows)) {
+      patterns.push("Lower highs and lower lows (downtrend)");
     }
 
     // Check for breakout
@@ -334,10 +319,10 @@ Provide your signal in the JSON format specified.`;
     const support20 = Math.min(...lows.slice(-20));
 
     if (current > resistance20 * 0.98) {
-      patterns.push('Near/at 20-day resistance breakout');
+      patterns.push("Near/at 20-day resistance breakout");
     }
     if (current < support20 * 1.02) {
-      patterns.push('Near/at 20-day support breakdown');
+      patterns.push("Near/at 20-day support breakdown");
     }
 
     // RSI divergence check (simplified)
@@ -345,10 +330,10 @@ Provide your signal in the JSON format specified.`;
     const rsiOlder = this.rsi(closes.slice(-28, -14), 14);
 
     if (current > closes[closes.length - 14] && rsiCurrent < rsiOlder) {
-      patterns.push('Bearish RSI divergence');
+      patterns.push("Bearish RSI divergence");
     }
     if (current < closes[closes.length - 14] && rsiCurrent > rsiOlder) {
-      patterns.push('Bullish RSI divergence');
+      patterns.push("Bullish RSI divergence");
     }
 
     return {
@@ -356,8 +341,8 @@ Provide your signal in the JSON format specified.`;
       support20,
       resistance20,
       currentPrice: current,
-      distanceToSupport: ((current - support20) / current * 100).toFixed(2) + '%',
-      distanceToResistance: ((resistance20 - current) / current * 100).toFixed(2) + '%',
+      distanceToSupport: `${(((current - support20) / current) * 100).toFixed(2)}%`,
+      distanceToResistance: `${(((resistance20 - current) / current) * 100).toFixed(2)}%`,
     };
   }
 
@@ -381,7 +366,7 @@ Provide your signal in the JSON format specified.`;
 
     if (losses === 0) return 100;
     const rs = gains / losses;
-    return 100 - (100 / (1 + rs));
+    return 100 - 100 / (1 + rs);
   }
 
   private macd(closes: number[]): { line: number; signal: number; histogram: number } {
@@ -412,21 +397,21 @@ Provide your signal in the JSON format specified.`;
     const trs: number[] = [];
 
     for (let i = 1; i < highs.length; i++) {
-      const tr = Math.max(
-        highs[i] - lows[i],
-        Math.abs(highs[i] - closes[i - 1]),
-        Math.abs(lows[i] - closes[i - 1])
-      );
+      const tr = Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
       trs.push(tr);
     }
 
     return this.sma(trs, period);
   }
 
-  private bollingerBands(closes: number[], period: number, stdDev: number): { upper: number; middle: number; lower: number } {
+  private bollingerBands(
+    closes: number[],
+    period: number,
+    stdDev: number,
+  ): { upper: number; middle: number; lower: number } {
     const middle = this.sma(closes, period);
     const slice = closes.slice(-period);
-    const variance = slice.reduce((sum, val) => sum + Math.pow(val - middle, 2), 0) / period;
+    const variance = slice.reduce((sum, val) => sum + (val - middle) ** 2, 0) / period;
     const std = Math.sqrt(variance);
 
     return {

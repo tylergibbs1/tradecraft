@@ -1,4 +1,4 @@
-import { Quote, OHLCV, TimeFrame } from "./types.js";
+import type { OHLCV, Quote, TimeFrame } from "./types.js";
 
 interface CachedQuote {
   quote: Quote;
@@ -17,12 +17,7 @@ export class DataCache {
   private quotes = new Map<string, CachedQuote>();
   private history = new Map<string, CachedHistory>();
 
-  private historyKey(
-    symbol: string,
-    timeframe: TimeFrame,
-    startDate: Date,
-    endDate: Date
-  ): string {
+  private historyKey(symbol: string, timeframe: TimeFrame, startDate: Date, endDate: Date): string {
     return `${symbol}:${timeframe}:${startDate.toISOString()}:${endDate.toISOString()}`;
   }
 
@@ -43,12 +38,7 @@ export class DataCache {
     });
   }
 
-  getHistory(
-    symbol: string,
-    timeframe: TimeFrame,
-    startDate: Date,
-    endDate: Date
-  ): OHLCV[] | undefined {
+  getHistory(symbol: string, timeframe: TimeFrame, startDate: Date, endDate: Date): OHLCV[] | undefined {
     const key = this.historyKey(symbol, timeframe, startDate, endDate);
     const cached = this.history.get(key);
     if (!cached) return undefined;
@@ -59,13 +49,7 @@ export class DataCache {
     return cached.data;
   }
 
-  setHistory(
-    symbol: string,
-    timeframe: TimeFrame,
-    startDate: Date,
-    endDate: Date,
-    data: OHLCV[]
-  ): void {
+  setHistory(symbol: string, timeframe: TimeFrame, startDate: Date, endDate: Date, data: OHLCV[]): void {
     const key = this.historyKey(symbol, timeframe, startDate, endDate);
     this.history.set(key, {
       data,

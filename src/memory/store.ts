@@ -5,34 +5,37 @@
  * and relevance scoring. Pruning: max 1000 entries, 30-day default TTL.
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { v4 as uuidv4 } from "uuid";
-import { MemoryEntry, MemoryQuery, MemoryQueryResult } from "./types.js";
+import type { MemoryEntry, MemoryQuery, MemoryQueryResult } from "./types.js";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const MEMORY_FILE = path.join(DATA_DIR, "memory.json");
+const DEFAULT_DATA_DIR = path.join(process.cwd(), "data");
+const DEFAULT_MEMORY_FILE = path.join(DEFAULT_DATA_DIR, "memory.json");
 const MAX_ENTRIES = 1000;
 const DEFAULT_TTL_DAYS = 30;
 
 export class MemoryStore {
   private entries: MemoryEntry[] = [];
+  private filePath: string;
 
-  constructor() {
+  constructor(filePath?: string) {
+    this.filePath = filePath ?? DEFAULT_MEMORY_FILE;
     this.ensureDir();
     this.load();
   }
 
   private ensureDir(): void {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const dir = path.dirname(this.filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
   }
 
   private load(): void {
     try {
-      if (fs.existsSync(MEMORY_FILE)) {
-        const data = fs.readFileSync(MEMORY_FILE, "utf-8");
+      if (fs.existsSync(this.filePath)) {
+        const data = fs.readFileSync(this.filePath, "utf-8");
         this.entries = JSON.parse(data);
       }
     } catch {
@@ -42,7 +45,7 @@ export class MemoryStore {
 
   private save(): void {
     this.ensureDir();
-    fs.writeFileSync(MEMORY_FILE, JSON.stringify(this.entries, null, 2));
+    fs.writeFileSync(this.filePath, JSON.stringify(this.entries, null, 2));
   }
 
   /**
@@ -72,7 +75,7 @@ export class MemoryStore {
    * Get entry by ID
    */
   get(id: string): MemoryEntry | null {
-    return this.entries.find(e => e.id === id) ?? null;
+    return this.entries.find((e) => e.id === id) ?? null;
   }
 
   /**
@@ -80,7 +83,7 @@ export class MemoryStore {
    */
   delete(id: string): boolean {
     const len = this.entries.length;
-    this.entries = this.entries.filter(e => e.id !== id);
+    this.entries = this.entries.filter((e) => e.id !== id);
     if (this.entries.length < len) {
       this.save();
       return true;
@@ -96,7 +99,7 @@ export class MemoryStore {
     const maxAgeDays = q.maxAge ?? DEFAULT_TTL_DAYS;
     const cutoff = now - maxAgeDays * 24 * 60 * 60 * 1000;
 
-    let candidates = this.entries.filter(e => {
+    const candidates = this.entries.filter((e) => {
       // Filter expired
       if (e.expiresAt && new Date(e.expiresAt).getTime() < now) return false;
       // Filter by age
@@ -109,12 +112,12 @@ export class MemoryStore {
     });
 
     // Score each candidate
-    const results: MemoryQueryResult[] = candidates.map(entry => {
+    const results: MemoryQueryResult[] = candidates.map((entry) => {
       let score = 0;
 
       // Symbol match: 0.4 weight
       if (q.symbols && q.symbols.length > 0) {
-        const symbolOverlap = entry.symbols.filter(s => q.symbols!.includes(s)).length;
+        const symbolOverlap = entry.symbols.filter((s) => q.symbols!.includes(s)).length;
         const symbolScore = q.symbols.length > 0 ? symbolOverlap / q.symbols.length : 0;
         score += symbolScore * 0.4;
       } else {
@@ -123,7 +126,7 @@ export class MemoryStore {
 
       // Tag match: 0.3 weight
       if (q.tags && q.tags.length > 0) {
-        const tagOverlap = entry.tags.filter(t => q.tags!.includes(t)).length;
+        const tagOverlap = entry.tags.filter((t) => q.tags!.includes(t)).length;
         const tagScore = q.tags.length > 0 ? tagOverlap / q.tags.length : 0;
         score += tagScore * 0.3;
       } else {
@@ -166,10 +169,8 @@ export class MemoryStore {
 
     if (results.length === 0) return "";
 
-    const lines = results.map(r => {
-      const age = Math.round(
-        (Date.now() - new Date(r.entry.createdAt).getTime()) / (24 * 60 * 60 * 1000)
-      );
+    const lines = results.map((r) => {
+      const age = Math.round((Date.now() - new Date(r.entry.createdAt).getTime()) / (24 * 60 * 60 * 1000));
       return `[${r.entry.type}] (${age}d ago, conf: ${r.entry.confidence.toFixed(1)}) ${r.entry.symbols.join(",")}: ${r.entry.content}`;
     });
 
@@ -183,7 +184,7 @@ export class MemoryStore {
     const now = Date.now();
 
     // Remove expired entries first
-    this.entries = this.entries.filter(e => {
+    this.entries = this.entries.filter((e) => {
       if (e.expiresAt && new Date(e.expiresAt).getTime() < now) return false;
       return true;
     });

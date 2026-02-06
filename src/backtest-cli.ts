@@ -1,15 +1,23 @@
 #!/usr/bin/env bun
-import { DataManager } from "./data/index.js";
-import { BacktestEngine, BacktestConfig, BacktestResult, getStrategy, listStrategies } from "./backtest/index.js";
-import { loadConfig, configExists } from "./config/index.js";
 import * as asciichart from "asciichart";
+import {
+  type BacktestConfig,
+  BacktestEngine,
+  type BacktestResult,
+  getStrategy,
+  listStrategies,
+} from "./backtest/index.js";
+import { configExists, loadConfig } from "./config/index.js";
+import { DataManager } from "./data/index.js";
 
 function printUsage(): void {
   console.log(`
 Usage: bun run backtest <strategy> [options]
 
 Available strategies:
-${listStrategies().map(s => `  - ${s}`).join('\n')}
+${listStrategies()
+  .map((s) => `  - ${s}`)
+  .join("\n")}
 
 Options:
   --start <date>    Start date (YYYY-MM-DD), default: 1 year ago
@@ -23,16 +31,16 @@ Example:
 }
 
 function formatCurrency(value: number): string {
-  return "$" + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatPercent(value: number): string {
   const sign = value >= 0 ? "+" : "";
-  return sign + (value * 100).toFixed(2) + "%";
+  return `${sign + (value * 100).toFixed(2)}%`;
 }
 
 function printResults(result: BacktestResult): void {
-  console.log("\n" + "═".repeat(60));
+  console.log(`\n${"═".repeat(60)}`);
   console.log("                    BACKTEST RESULTS");
   console.log("═".repeat(60));
 
@@ -63,29 +71,34 @@ function printResults(result: BacktestResult): void {
   console.log("─".repeat(40));
   console.log(`Trading Days:      ${result.tradingDays}`);
   console.log(`Symbols:           ${result.config.symbols.join(", ")}`);
-  console.log(`Period:            ${result.config.startDate.toISOString().split("T")[0]} to ${result.config.endDate.toISOString().split("T")[0]}`);
+  console.log(
+    `Period:            ${result.config.startDate.toISOString().split("T")[0]} to ${result.config.endDate.toISOString().split("T")[0]}`,
+  );
 
   // Print equity curve
   if (result.equityCurve.length > 10) {
     console.log("\nEQUITY CURVE");
     console.log("─".repeat(40));
-    const equityValues = result.equityCurve.map(s => s.equity);
+    const equityValues = result.equityCurve.map((s) => s.equity);
     // Sample if too many points
-    const sampledValues = equityValues.length > 100
-      ? equityValues.filter((_, i) => i % Math.ceil(equityValues.length / 100) === 0)
-      : equityValues;
+    const sampledValues =
+      equityValues.length > 100
+        ? equityValues.filter((_, i) => i % Math.ceil(equityValues.length / 100) === 0)
+        : equityValues;
 
     try {
-      console.log(asciichart.plot(sampledValues, {
-        height: 10,
-        format: (x: number) => formatCurrency(x).padStart(12),
-      }));
+      console.log(
+        asciichart.plot(sampledValues, {
+          height: 10,
+          format: (x: number) => formatCurrency(x).padStart(12),
+        }),
+      );
     } catch {
       console.log("(Unable to render chart)");
     }
   }
 
-  console.log("\n" + "═".repeat(60));
+  console.log(`\n${"═".repeat(60)}`);
 }
 
 async function main() {
@@ -124,7 +137,7 @@ async function main() {
   // Override from command line
   const symbolsArg = getArg("symbols");
   if (symbolsArg) {
-    symbols = symbolsArg.split(",").map(s => s.trim().toUpperCase());
+    symbols = symbolsArg.split(",").map((s) => s.trim().toUpperCase());
   }
 
   const capitalArg = getArg("capital");
@@ -136,9 +149,7 @@ async function main() {
   const endArg = getArg("end");
 
   const endDate = endArg ? new Date(endArg) : new Date();
-  const startDate = startArg
-    ? new Date(startArg)
-    : new Date(endDate.getTime() - 365 * 24 * 60 * 60 * 1000); // 1 year ago
+  const startDate = startArg ? new Date(startArg) : new Date(endDate.getTime() - 365 * 24 * 60 * 60 * 1000); // 1 year ago
 
   console.log(`Running backtest: ${strategy.name}`);
   console.log(`Description: ${strategy.description}`);

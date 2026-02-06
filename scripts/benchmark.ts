@@ -1,6 +1,11 @@
 #!/usr/bin/env bun
+
 /**
  * End-to-end benchmark: Evolution pipeline with real market data
+ *
+ * Usage:
+ *   bun run scripts/benchmark.ts           # normal run
+ *   bun run scripts/benchmark.ts --clean   # delete data files first
  *
  * 1. Fetches AAPL, GOOGL, MSFT history via Yahoo
  * 2. Compiles 3 different StrategySpec DSLs
@@ -9,16 +14,36 @@
  * 5. Reports all results with actual P&L numbers
  */
 
-import { DataManager } from "../src/data/index.js";
-import { BacktestEngine } from "../src/backtest/engine.js";
-import { BacktestConfig, BacktestResult } from "../src/backtest/types.js";
-import { compileStrategy, validateSpec } from "../src/evolution/compiler.js";
-import { scoreBacktestResult, summarizeBacktest } from "../src/evolution/scoring.js";
-import { mutateStrategy, combineStrategies } from "../src/evolution/engine.js";
-import { StrategyStore } from "../src/evolution/store.js";
-import { MemoryStore } from "../src/memory/store.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { AttributionEngine } from "../src/attribution/engine.js";
+import { BacktestEngine } from "../src/backtest/engine.js";
+import type { BacktestConfig, BacktestResult } from "../src/backtest/types.js";
+import { DataManager } from "../src/data/index.js";
+import { compileStrategy, validateSpec } from "../src/evolution/compiler.js";
+import { combineStrategies, mutateStrategy } from "../src/evolution/engine.js";
+import { scoreBacktestResult, summarizeBacktest } from "../src/evolution/scoring.js";
+import { StrategyStore } from "../src/evolution/store.js";
 import type { StrategySpec } from "../src/evolution/types.js";
+import { MemoryStore } from "../src/memory/store.js";
+
+// --clean flag: delete data files so benchmark starts from scratch
+if (process.argv.includes("--clean")) {
+  const dataDir = path.join(process.cwd(), "data");
+  const filesToDelete = [
+    path.join(dataDir, "memory.json"),
+    path.join(dataDir, "attribution.json"),
+    path.join(dataDir, "agent_performance.json"),
+    path.join(dataDir, "strategies", "index.json"),
+  ];
+  for (const f of filesToDelete) {
+    if (fs.existsSync(f)) {
+      fs.unlinkSync(f);
+      console.log(`  Cleaned: ${path.relative(process.cwd(), f)}`);
+    }
+  }
+  console.log();
+}
 
 const SYMBOLS = ["AAPL", "GOOGL", "MSFT"];
 const START = new Date("2024-01-01");
@@ -50,7 +75,7 @@ const smaCrossover: StrategySpec = {
     takeProfitPercent: 0.12,
     timeStopDays: 30,
   },
-  positionSizing: { method: "fixed_percent", basePercent: 0.15, maxPercent: 0.20 },
+  positionSizing: { method: "fixed_percent", basePercent: 0.15, maxPercent: 0.2 },
 };
 
 const rsiOversold: StrategySpec = {
@@ -96,7 +121,7 @@ const emaMomentum: StrategySpec = {
     trailingStopPercent: 0.04,
     timeStopDays: 45,
   },
-  positionSizing: { method: "fixed_percent", basePercent: 0.15, maxPercent: 0.20 },
+  positionSizing: { method: "fixed_percent", basePercent: 0.15, maxPercent: 0.2 },
 };
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -107,7 +132,9 @@ function printResult(name: string, r: BacktestResult) {
   const reset = "\x1b[0m";
 
   console.log(`  ${name}`);
-  console.log(`    Return:       ${pnlColor}${r.totalReturn >= 0 ? "+" : ""}$${r.totalReturn.toFixed(2)} (${(r.totalReturnPercent * 100).toFixed(2)}%)${reset}`);
+  console.log(
+    `    Return:       ${pnlColor}${r.totalReturn >= 0 ? "+" : ""}$${r.totalReturn.toFixed(2)} (${(r.totalReturnPercent * 100).toFixed(2)}%)${reset}`,
+  );
   console.log(`    Sharpe:       ${r.sharpeRatio.toFixed(3)}`);
   console.log(`    Max Drawdown: ${(r.maxDrawdown * 100).toFixed(2)}%`);
   console.log(`    Win Rate:     ${(r.winRate * 100).toFixed(1)}% (${r.winningTrades}W/${r.losingTrades}L)`);
@@ -163,12 +190,12 @@ async function main() {
   }
 
   // Rank by composite score
-  results.sort((a, b) =>
-    scoreBacktestResult(b.result).composite - scoreBacktestResult(a.result).composite
-  );
+  results.sort((a, b) => scoreBacktestResult(b.result).composite - scoreBacktestResult(a.result).composite);
   const bestParent = results[0]!;
   const secondBest = results[1]!;
-  console.log(`  Best: ${bestParent.spec.name} (composite: ${scoreBacktestResult(bestParent.result).composite.toFixed(4)})\n`);
+  console.log(
+    `  Best: ${bestParent.spec.name} (composite: ${scoreBacktestResult(bestParent.result).composite.toFixed(4)})\n`,
+  );
 
   // 4. Evolve: 2 generations of 5 mutations each
   console.log("─── Evolution (2 Generations × 5 Mutations) ───────────────\n");
@@ -190,7 +217,9 @@ async function main() {
       const score = scoreBacktestResult(result);
 
       children.push({ spec: childSpec, result, mutation });
-      console.log(`    ${mutation.padEnd(20)} → return: ${(result.totalReturnPercent * 100).toFixed(2)}%, sharpe: ${result.sharpeRatio.toFixed(3)}, composite: ${score.composite.toFixed(4)}`);
+      console.log(
+        `    ${mutation.padEnd(20)} → return: ${(result.totalReturnPercent * 100).toFixed(2)}%, sharpe: ${result.sharpeRatio.toFixed(3)}, composite: ${score.composite.toFixed(4)}`,
+      );
     }
 
     // Also try combining top 2
@@ -200,13 +229,13 @@ async function main() {
     const combEngine = new BacktestEngine(dm, btConfig);
     const combResult = await combEngine.run(combStrategy);
     const combScore = scoreBacktestResult(combResult);
-    console.log(`    ${"combine".padEnd(20)} → return: ${(combResult.totalReturnPercent * 100).toFixed(2)}%, sharpe: ${combResult.sharpeRatio.toFixed(3)}, composite: ${combScore.composite.toFixed(4)}`);
+    console.log(
+      `    ${"combine".padEnd(20)} → return: ${(combResult.totalReturnPercent * 100).toFixed(2)}%, sharpe: ${combResult.sharpeRatio.toFixed(3)}, composite: ${combScore.composite.toFixed(4)}`,
+    );
     children.push({ spec: combined, result: combResult, mutation: "combine" });
 
     // Select best child
-    children.sort((a, b) =>
-      scoreBacktestResult(b.result).composite - scoreBacktestResult(a.result).composite
-    );
+    children.sort((a, b) => scoreBacktestResult(b.result).composite - scoreBacktestResult(a.result).composite);
     const genBest = children[0]!;
     const genBestScore = scoreBacktestResult(genBest.result).composite;
     const parentScore = scoreBacktestResult(currentBest.result).composite;
@@ -230,7 +259,7 @@ async function main() {
 
   // Record per-strategy real performance observations
   for (const r of results) {
-    const closingTrades = r.result.trades.filter(t => t.pnl !== undefined);
+    const closingTrades = r.result.trades.filter((t) => t.pnl !== undefined);
     const bySymbol = new Map<string, { wins: number; losses: number; pnl: number }>();
     for (const t of closingTrades) {
       const entry = bySymbol.get(t.symbol) ?? { wins: 0, losses: 0, pnl: 0 };
@@ -276,7 +305,13 @@ async function main() {
   const ctx = memoryStore.buildMemoryContext(SYMBOLS);
   console.log(`  Memory entries:  ${memoryStore.getCount()}`);
   console.log(`  Context length:  ${ctx.length} chars`);
-  console.log(`  Sample context:\n${ctx.split("\n").slice(0, 6).map(l => `    ${l}`).join("\n")}`);
+  console.log(
+    `  Sample context:\n${ctx
+      .split("\n")
+      .slice(0, 6)
+      .map((l) => `    ${l}`)
+      .join("\n")}`,
+  );
 
   // 7. Attribution — each strategy is an agent, each real trade is a real signal
   console.log("\n─── Attribution (real trades → real P&L) ──────────────────\n");
@@ -295,31 +330,29 @@ async function main() {
 
   for (const r of results) {
     const agentRole = strategyAgentMap[r.spec.name] ?? r.spec.name;
-    const closingTrades = r.result.trades.filter(t => t.pnl !== undefined);
+    const closingTrades = r.result.trades.filter((t) => t.pnl !== undefined);
 
     for (const trade of closingTrades) {
       // Real trade ID, real symbol, real side, real P&L
       const tradeId = `${agentRole}-${trade.symbol}-${trade.timestamp}`;
-      attribution.recordAttribution(
-        tradeId,
-        trade.symbol,
-        trade.side,
-        trade.pnl!,
-        [{
+      attribution.recordAttribution(tradeId, trade.symbol, trade.side, trade.pnl!, [
+        {
           signalId: tradeId,
           agentRole,
           signal: trade.side.toUpperCase(),
-          confidence: r.result.winRate,  // strategy's actual win rate as confidence
+          confidence: r.result.winRate, // strategy's actual win rate as confidence
           weight: equalWeight,
-        }]
-      );
+        },
+      ]);
     }
   }
 
   const perfs = attribution.getPerformance();
   console.log(`  Strategies tracked: ${perfs.length}`);
   for (const p of perfs) {
-    console.log(`    ${p.agentRole.padEnd(22)} ${p.totalSignals} trades, accuracy ${(p.accuracy * 100).toFixed(0)}%, P&L $${p.totalAttributedPnl.toFixed(2)}`);
+    console.log(
+      `    ${p.agentRole.padEnd(22)} ${p.totalSignals} trades, accuracy ${(p.accuracy * 100).toFixed(0)}%, P&L $${p.totalAttributedPnl.toFixed(2)}`,
+    );
   }
 
   // Weight adjustments from real performance data
@@ -331,7 +364,9 @@ async function main() {
   if (adjustments.length > 0) {
     console.log("\n  Weight adjustments (from real accuracy + P&L):");
     for (const adj of adjustments) {
-      console.log(`    ${adj.agentRole.padEnd(22)} ${(adj.previousWeight * 100).toFixed(1)}% → ${(adj.newWeight * 100).toFixed(1)}% (${adj.reason})`);
+      console.log(
+        `    ${adj.agentRole.padEnd(22)} ${(adj.previousWeight * 100).toFixed(1)}% → ${(adj.newWeight * 100).toFixed(1)}% (${adj.reason})`,
+      );
     }
   } else {
     console.log("\n  No weight adjustments (need ≥5 signals per agent)");
@@ -361,7 +396,7 @@ async function main() {
   console.log("═══════════════════════════════════════════════════════════\n");
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error("Benchmark failed:", e);
   process.exit(1);
 });

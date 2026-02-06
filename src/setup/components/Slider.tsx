@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import { useState } from "react";
 
 interface SliderProps {
   label: string;
@@ -11,18 +11,10 @@ interface SliderProps {
   onSubmit: (value: number) => void;
 }
 
-export function Slider({
-  label,
-  min,
-  max,
-  step,
-  defaultValue,
-  format = (v) => v.toString(),
-  onSubmit,
-}: SliderProps) {
+export function Slider({ label, min, max, step, defaultValue, format = (v) => v.toString(), onSubmit }: SliderProps) {
   const [value, setValue] = useState(defaultValue);
 
-  useInput((input, key) => {
+  useInput((_input, key) => {
     if (key.leftArrow) {
       setValue((v) => Math.max(min, v - step));
     } else if (key.rightArrow) {

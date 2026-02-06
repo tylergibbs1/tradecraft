@@ -5,22 +5,16 @@
  * and smoothly adjusts agent weights (70/30 blend, clamped to [0.05, 0.40]).
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import {
-  TradeAttribution,
-  SignalContribution,
-  AgentPerformance,
-  WeightAdjustment,
-} from "./types.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import type { AgentPerformance, SignalContribution, TradeAttribution, WeightAdjustment } from "./types.js";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const ATTRIBUTION_FILE = path.join(DATA_DIR, "attribution.json");
-const PERFORMANCE_FILE = path.join(DATA_DIR, "agent_performance.json");
+const DEFAULT_DATA_DIR = path.join(process.cwd(), "data");
+const DEFAULT_ATTRIBUTION_FILE = path.join(DEFAULT_DATA_DIR, "attribution.json");
 
-const SMOOTHING_FACTOR = 0.30;  // 30% new, 70% old weight
+const SMOOTHING_FACTOR = 0.3; // 30% new, 70% old weight
 const MIN_WEIGHT = 0.05;
-const MAX_WEIGHT = 0.40;
+const MAX_WEIGHT = 0.4;
 
 interface PersistentState {
   attributions: TradeAttribution[];
@@ -30,31 +24,36 @@ interface PersistentState {
 
 export class AttributionEngine {
   private state: PersistentState;
+  private filePath: string;
 
-  constructor() {
+  constructor(filePath?: string) {
+    this.filePath = filePath ?? DEFAULT_ATTRIBUTION_FILE;
     this.ensureDir();
     this.state = this.load();
   }
 
   private ensureDir(): void {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const dir = path.dirname(this.filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
   }
 
   private load(): PersistentState {
     try {
-      if (fs.existsSync(ATTRIBUTION_FILE)) {
-        const data = fs.readFileSync(ATTRIBUTION_FILE, "utf-8");
+      if (fs.existsSync(this.filePath)) {
+        const data = fs.readFileSync(this.filePath, "utf-8");
         return JSON.parse(data);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return { attributions: [], performances: {}, adjustmentHistory: [] };
   }
 
   private save(): void {
     this.ensureDir();
-    fs.writeFileSync(ATTRIBUTION_FILE, JSON.stringify(this.state, null, 2));
+    fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2));
   }
 
   /**
@@ -71,23 +70,18 @@ export class AttributionEngine {
       signal: string;
       confidence: number;
       weight: number;
-    }>
+    }>,
   ): TradeAttribution {
     // Distribute P&L proportional to confidence * weight
-    const totalContribution = contributingSignals.reduce(
-      (sum, s) => sum + s.confidence * s.weight,
-      0
-    );
+    const totalContribution = contributingSignals.reduce((sum, s) => sum + s.confidence * s.weight, 0);
 
-    const signals: SignalContribution[] = contributingSignals.map(s => ({
+    const signals: SignalContribution[] = contributingSignals.map((s) => ({
       signalId: s.signalId,
       agentRole: s.agentRole,
       signal: s.signal,
       confidence: s.confidence,
       weight: s.weight,
-      attributedPnl: totalContribution > 0
-        ? pnl * (s.confidence * s.weight) / totalContribution
-        : 0,
+      attributedPnl: totalContribution > 0 ? (pnl * (s.confidence * s.weight)) / totalContribution : 0,
     }));
 
     const attribution: TradeAttribution = {
@@ -138,23 +132,20 @@ export class AttributionEngine {
     if (profitable) perf.accurateSignals++;
     perf.accuracy = perf.totalSignals > 0 ? perf.accurateSignals / perf.totalSignals : 0;
     perf.totalAttributedPnl += signal.attributedPnl;
-    perf.averageConfidence =
-      (perf.averageConfidence * (perf.totalSignals - 1) + signal.confidence) / perf.totalSignals;
+    perf.averageConfidence = (perf.averageConfidence * (perf.totalSignals - 1) + signal.confidence) / perf.totalSignals;
     perf.lastUpdated = new Date().toISOString();
   }
 
   /**
    * Calculate suggested weight adjustments based on performance
    */
-  calculateWeightAdjustments(
-    currentWeights: Record<string, number>
-  ): WeightAdjustment[] {
+  calculateWeightAdjustments(currentWeights: Record<string, number>): WeightAdjustment[] {
     const adjustments: WeightAdjustment[] = [];
 
     for (const [role, perf] of Object.entries(this.state.performances)) {
       if (perf.totalSignals < 5) continue; // Need enough data
 
-      const currentWeight = currentWeights[role] ?? 0.10;
+      const currentWeight = currentWeights[role] ?? 0.1;
 
       // Performance-based target: accuracy * normalized PnL contribution
       const pnlSignal = perf.totalAttributedPnl > 0 ? 1.2 : 0.8;
@@ -181,7 +172,7 @@ export class AttributionEngine {
     // Normalize weights to sum to ~1.0
     if (adjustments.length > 0) {
       const totalNewWeight = Object.entries(currentWeights).reduce((sum, [role]) => {
-        const adj = adjustments.find(a => a.agentRole === role);
+        const adj = adjustments.find((a) => a.agentRole === role);
         return sum + (adj ? adj.newWeight : (currentWeights[role] ?? 0));
       }, 0);
 

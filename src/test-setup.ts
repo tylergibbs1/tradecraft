@@ -3,7 +3,7 @@
  * Non-interactive test of the setup and config system
  * This simulates what the setup wizard does
  */
-import { saveConfig, loadConfig, configExists, getConfigPath, defaultConfig, Config } from "./config/index.js";
+import { type Config, configExists, getConfigPath, loadConfig, saveConfig } from "./config/index.js";
 
 console.log("Testing Tradecraft Setup System\n");
 console.log("================================\n");
@@ -45,11 +45,11 @@ const testConfig: Config = {
     specialistModel: "claude-sonnet-4-5-20250929",
     weights: {
       "fundamental-analyst": 0.25,
-      "earnings-analyst": 0.20,
+      "earnings-analyst": 0.2,
       "technical-analyst": 0.15,
-      "sentiment-analyst": 0.10,
+      "sentiment-analyst": 0.1,
       "macro-analyst": 0.15,
-      "catalyst-analyst": 0.10,
+      "catalyst-analyst": 0.1,
       "hypothesis-generator": 0.05,
     },
     parallelSpecialists: true,

@@ -1,16 +1,9 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { v4 as uuidv4 } from "uuid";
-import { OrderSide, OrderType } from "../risk/types.js";
-import { Quote } from "../data/types.js";
-import {
-  Order,
-  OrderStatus,
-  Position,
-  PortfolioState,
-  Trade,
-  DailySnapshot,
-} from "./types.js";
+import type { Quote } from "../data/types.js";
+import type { OrderSide, OrderType } from "../risk/types.js";
+import type { DailySnapshot, Order, PortfolioState, Position, Trade } from "./types.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const PORTFOLIO_FILE = path.join(DATA_DIR, "portfolio.json");
@@ -91,10 +84,8 @@ export class PortfolioManager {
       if (quote) {
         position.currentPrice = quote.last;
         position.marketValue = position.quantity * quote.last;
-        position.unrealizedPnL =
-          (quote.last - position.averageCost) * position.quantity;
-        position.unrealizedPnLPercent =
-          (quote.last - position.averageCost) / position.averageCost;
+        position.unrealizedPnL = (quote.last - position.averageCost) * position.quantity;
+        position.unrealizedPnLPercent = (quote.last - position.averageCost) / position.averageCost;
         position.lastUpdated = new Date().toISOString();
       }
     }
@@ -104,10 +95,7 @@ export class PortfolioManager {
   }
 
   private recalculateEquity(): void {
-    const positionValue = Object.values(this.state.positions).reduce(
-      (sum, p) => sum + p.marketValue,
-      0
-    );
+    const positionValue = Object.values(this.state.positions).reduce((sum, p) => sum + p.marketValue, 0);
     this.state.equity = this.state.cash + positionValue;
 
     if (this.state.equity > this.state.peakEquity) {
@@ -124,7 +112,7 @@ export class PortfolioManager {
     type: OrderType,
     quantity: number,
     price?: number,
-    stopPrice?: number
+    stopPrice?: number,
   ): Order {
     const order: Order = {
       id: uuidv4(),
@@ -161,11 +149,7 @@ export class PortfolioManager {
   /**
    * Fill an order (for paper trading / simulation)
    */
-  fillOrder(
-    orderId: string,
-    fillPrice: number,
-    fillQuantity?: number
-  ): { order: Order; trade: Trade } | null {
+  fillOrder(orderId: string, fillPrice: number, fillQuantity?: number): { order: Order; trade: Trade } | null {
     const order = this.state.openOrders[orderId];
     if (!order) return null;
 
@@ -214,9 +198,7 @@ export class PortfolioManager {
     // Update order
     order.filledQuantity += qty;
     order.averageFillPrice = order.averageFillPrice
-      ? (order.averageFillPrice * (order.filledQuantity - qty) +
-          fillPrice * qty) /
-        order.filledQuantity
+      ? (order.averageFillPrice * (order.filledQuantity - qty) + fillPrice * qty) / order.filledQuantity
       : fillPrice;
     order.updatedAt = new Date().toISOString();
 
@@ -237,19 +219,13 @@ export class PortfolioManager {
     return { order, trade };
   }
 
-  private updatePosition(
-    symbol: string,
-    side: OrderSide,
-    quantity: number,
-    price: number
-  ): void {
+  private updatePosition(symbol: string, side: OrderSide, quantity: number, price: number): void {
     let position = this.state.positions[symbol];
 
     if (side === "buy") {
       if (position) {
         // Add to existing position
-        const totalCost =
-          position.averageCost * position.quantity + price * quantity;
+        const totalCost = position.averageCost * position.quantity + price * quantity;
         position.quantity += quantity;
         position.averageCost = totalCost / position.quantity;
       } else {
@@ -370,7 +346,7 @@ export class PortfolioManager {
         Object.entries(this.state.positions).map(([sym, pos]) => [
           sym,
           { quantity: pos.quantity, averageCost: pos.averageCost },
-        ])
+        ]),
       ),
       dailyPnL: this.state.dailyPnL,
     };

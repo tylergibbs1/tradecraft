@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
-import React from "react";
 import { render } from "ink";
+import { configExists, loadConfig } from "./config/index.js";
 import { App } from "./ui/App.js";
-import { loadConfig, configExists } from "./config/index.js";
 
 async function main() {
   // Check if config exists

@@ -1,18 +1,18 @@
 import { z } from "zod";
-import { PortfolioManager } from "../portfolio/manager.js";
-import { RiskMonitor, PortfolioSnapshot } from "../risk/monitor.js";
-import { DataManager, Quote } from "../data/index.js";
-import { OrderSideSchema, OrderTypeSchema } from "../risk/types.js";
+import type { DataManager, Quote } from "../data/index.js";
 import { getEdgarProvider } from "../data/providers/edgar.js";
+import { type ExaCategory, getExaProvider } from "../data/providers/exa.js";
 import { getNewsProvider } from "../data/providers/news.js";
-import { getExaProvider, ExaCategory } from "../data/providers/exa.js";
 import {
-  getPolygonNewsProvider,
   getPolygonIndicatorsProvider,
+  getPolygonNewsProvider,
   getPolygonTickersProvider,
   type IndicatorTimespan,
   type TickerType,
 } from "../data/providers/polygon/index.js";
+import type { PortfolioManager } from "../portfolio/manager.js";
+import type { PortfolioSnapshot, RiskMonitor } from "../risk/monitor.js";
+import { OrderSideSchema, OrderTypeSchema } from "../risk/types.js";
 
 // Tool input schemas
 const PlaceOrderSchema = z.object({
@@ -46,7 +46,9 @@ const GetRiskStatusSchema = z.object({});
 const GetFilingSchema = z.object({
   symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
   formType: z.enum(["10-K", "10-Q", "8-K"]).optional().describe("SEC form type (default: 10-K)"),
-  sections: z.array(z.enum(["business", "risk_factors", "mda", "financials"])).optional()
+  sections: z
+    .array(z.enum(["business", "risk_factors", "mda", "financials"]))
+    .optional()
     .describe("Specific sections to extract (for 10-K only)"),
 });
 
@@ -68,7 +70,9 @@ const GetRecentFilingsSchema = z.object({
 // Exa AI search schemas
 const ExaSearchSchema = z.object({
   query: z.string().min(1).describe("Search query"),
-  category: z.enum(["financial report", "news", "company", "research paper"]).optional()
+  category: z
+    .enum(["financial report", "news", "company", "research paper"])
+    .optional()
     .describe("Search category (default: auto-detect)"),
   numResults: z.number().int().min(1).max(50).optional().describe("Number of results (default: 10)"),
   daysBack: z.number().int().min(1).max(365).optional().describe("Limit to recent content (days)"),
@@ -76,7 +80,9 @@ const ExaSearchSchema = z.object({
 
 const ExaFinancialSearchSchema = z.object({
   symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
-  searchType: z.enum(["reports", "news", "earnings", "analyst", "competitors"]).describe("Type of financial content to search"),
+  searchType: z
+    .enum(["reports", "news", "earnings", "analyst", "competitors"])
+    .describe("Type of financial content to search"),
   numResults: z.number().int().min(1).max(20).optional().describe("Number of results (default: 10)"),
 });
 
@@ -89,10 +95,11 @@ const GetPolygonNewsSchema = z.object({
 
 const GetTechnicalIndicatorsSchema = z.object({
   symbol: z.string().min(1).max(10).describe("Stock ticker symbol"),
-  indicators: z.array(z.enum(["sma", "ema", "rsi", "macd", "all"])).optional()
+  indicators: z
+    .array(z.enum(["sma", "ema", "rsi", "macd", "all"]))
+    .optional()
     .describe("Indicators to fetch (default: all)"),
-  timespan: z.enum(["minute", "hour", "day", "week"]).optional()
-    .describe("Time period for each bar (default: day)"),
+  timespan: z.enum(["minute", "hour", "day", "week"]).optional().describe("Time period for each bar (default: day)"),
   limit: z.number().int().min(1).max(200).optional().describe("Number of data points (default: 50)"),
 });
 
@@ -110,7 +117,9 @@ const GetCompanyInfoSchema = z.object({
 const SearchTickersSchema = z.object({
   query: z.string().min(1).optional().describe("Search term for company name or ticker"),
   ticker: z.string().optional().describe("Exact ticker to search for"),
-  type: z.enum(["CS", "ETF", "ETN", "FUND", "PFD", "ADRC"]).optional()
+  type: z
+    .enum(["CS", "ETF", "ETN", "FUND", "PFD", "ADRC"])
+    .optional()
     .describe("Ticker type: CS=Common Stock, ETF, etc."),
   exchange: z.string().optional().describe("Primary exchange MIC code (e.g., XNAS, XNYS)"),
   activeOnly: z.boolean().optional().describe("Only return actively traded tickers (default: true)"),
@@ -140,14 +149,17 @@ export interface TradingMCPServerDeps {
   dataManager: DataManager;
   tradingUniverse: string[];
   polygonApiKey?: string;
-  evolutionTools?: Record<string, { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }>;
-  memoryTools?: Record<string, { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }>;
+  evolutionTools?: Record<
+    string,
+    { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }
+  >;
+  memoryTools?: Record<
+    string,
+    { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }
+  >;
 }
 
-function createPortfolioSnapshot(
-  portfolioManager: PortfolioManager,
-  quotes: Map<string, Quote>
-): PortfolioSnapshot {
+function createPortfolioSnapshot(portfolioManager: PortfolioManager, quotes: Map<string, Quote>): PortfolioSnapshot {
   const state = portfolioManager.getState();
   const positions = new Map<string, { quantity: number; averageCost: number; currentPrice: number }>();
 
@@ -179,13 +191,12 @@ function sanitizeSymbol(symbol: string): string | null {
 }
 
 function sanitizeTradingUniverse(symbols: string[]): string[] {
-  return symbols
-    .map(s => sanitizeSymbol(s))
-    .filter((s): s is string => s !== null);
+  return symbols.map((s) => sanitizeSymbol(s)).filter((s): s is string => s !== null);
 }
 
 export function createTradingTools(deps: TradingMCPServerDeps) {
-  const { portfolioManager, riskMonitor, dataManager, tradingUniverse, polygonApiKey, evolutionTools, memoryTools } = deps;
+  const { portfolioManager, riskMonitor, dataManager, tradingUniverse, polygonApiKey, evolutionTools, memoryTools } =
+    deps;
 
   // Sanitize trading universe to prevent prompt injection via symbol names
   const sanitizedUniverse = sanitizeTradingUniverse(tradingUniverse);
@@ -241,7 +252,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
             stopPrice: input.stopPrice,
           },
           snapshot,
-          quote.last
+          quote.last,
         );
 
         if (!validation.valid) {
@@ -259,7 +270,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
           input.type,
           input.quantity,
           input.price,
-          input.stopPrice
+          input.stopPrice,
         );
 
         portfolioManager.submitOrder(order.id);
@@ -267,9 +278,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
         // For paper trading with market orders, fill immediately
         if (input.type === "market") {
           // Use ask for buys, bid for sells, fallback to last price if not available
-          const fillPrice = input.side === "buy"
-            ? (quote.ask ?? quote.last)
-            : (quote.bid ?? quote.last);
+          const fillPrice = input.side === "buy" ? (quote.ask ?? quote.last) : (quote.bid ?? quote.last);
           const result = portfolioManager.fillOrder(order.id, fillPrice);
           if (result) {
             riskMonitor.recordTradeSuccess();
@@ -336,12 +345,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
               startDate.setDate(startDate.getDate() - days);
 
               try {
-                const history = await dataManager.getHistory(
-                  symbol,
-                  "1d",
-                  startDate,
-                  endDate
-                );
+                const history = await dataManager.getHistory(symbol, "1d", startDate, endDate);
                 data.history = history.map((bar) => ({
                   date: new Date(bar.timestamp).toISOString().split("T")[0],
                   open: bar.open,
@@ -374,7 +378,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
       description: "Get current portfolio state including positions, cash, equity, and P&L",
       inputSchema: GetPortfolioSchema,
       handler: async (input: GetPortfolioInput) => {
-        const state = portfolioManager.getState();
+        const _state = portfolioManager.getState();
         const positions = portfolioManager.getPositions();
 
         // Update prices
@@ -416,9 +420,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
       inputSchema: GetRiskStatusSchema,
       handler: async () => {
         const positions = portfolioManager.getPositions();
-        const quotes = positions.length > 0
-          ? await dataManager.getQuotes(positions.map((p) => p.symbol))
-          : new Map();
+        const quotes = positions.length > 0 ? await dataManager.getQuotes(positions.map((p) => p.symbol)) : new Map();
 
         const snapshot = createPortfolioSnapshot(portfolioManager, quotes);
         const status = riskMonitor.getStatus(snapshot);
@@ -454,7 +456,8 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
 
     // Fundamental data tools
     get_filing: {
-      description: "Get SEC filing content (10-K, 10-Q, 8-K) for fundamental analysis. For 10-K, can extract specific sections like business description, risk factors, and management discussion.",
+      description:
+        "Get SEC filing content (10-K, 10-Q, 8-K) for fundamental analysis. For 10-K, can extract specific sections like business description, risk factors, and management discussion.",
       inputSchema: GetFilingSchema,
       handler: async (input: GetFilingInput) => {
         const edgar = getEdgarProvider();
@@ -464,7 +467,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
           if (formType === "10-K" && input.sections && input.sections.length > 0) {
             const sections = await edgar.get10KSections(
               input.symbol,
-              input.sections as ("business" | "risk_factors" | "mda" | "financials")[]
+              input.sections as ("business" | "risk_factors" | "mda" | "financials")[],
             );
             return {
               success: true,
@@ -494,7 +497,8 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
     },
 
     get_financials: {
-      description: "Get key financial metrics from SEC filings including revenue, margins, debt ratios, and profitability metrics.",
+      description:
+        "Get key financial metrics from SEC filings including revenue, margins, debt ratios, and profitability metrics.",
       inputSchema: GetFinancialsSchema,
       handler: async (input: GetFinancialsInput) => {
         const edgar = getEdgarProvider();
@@ -523,7 +527,8 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
     },
 
     get_news: {
-      description: "Get recent news articles and sentiment scores for a stock. Includes headlines, sources, and sentiment analysis when available.",
+      description:
+        "Get recent news articles and sentiment scores for a stock. Includes headlines, sources, and sentiment analysis when available.",
       inputSchema: GetNewsSchema,
       handler: async (input: GetNewsInput) => {
         const newsProvider = getNewsProvider();
@@ -538,7 +543,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
             symbol: input.symbol,
             articleCount: news.length,
             sentiment,
-            articles: news.slice(0, 10).map(n => ({
+            articles: news.slice(0, 10).map((n) => ({
               title: n.title,
               source: n.source,
               publishedAt: n.publishedAt,
@@ -582,14 +587,13 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
 
     // Exa AI search tools
     exa_search: {
-      description: "AI-powered semantic search using Exa. Search for financial reports, news, company info, or research papers with natural language queries.",
+      description:
+        "AI-powered semantic search using Exa. Search for financial reports, news, company info, or research papers with natural language queries.",
       inputSchema: ExaSearchSchema,
       handler: async (input: ExaSearchInput) => {
         try {
           const exa = getExaProvider();
-          const startDate = input.daysBack
-            ? new Date(Date.now() - input.daysBack * 24 * 60 * 60 * 1000)
-            : undefined;
+          const startDate = input.daysBack ? new Date(Date.now() - input.daysBack * 24 * 60 * 60 * 1000) : undefined;
 
           const results = await exa.search(input.query, {
             category: input.category as ExaCategory | undefined,
@@ -601,9 +605,9 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
           return {
             success: true,
             query: input.query,
-            category: input.category || 'auto',
+            category: input.category || "auto",
             resultCount: results.length,
-            results: results.map(r => ({
+            results: results.map((r) => ({
               title: r.title,
               url: r.url,
               publishedDate: r.publishedDate,
@@ -622,7 +626,8 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
     },
 
     exa_financial_search: {
-      description: "Search for specific financial content using Exa AI. Find reports, news, earnings calls, analyst research, or competitor analysis for a stock.",
+      description:
+        "Search for specific financial content using Exa AI. Find reports, news, earnings calls, analyst research, or competitor analysis for a stock.",
       inputSchema: ExaFinancialSearchSchema,
       handler: async (input: ExaFinancialSearchInput) => {
         try {
@@ -631,18 +636,18 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
 
           let results;
           switch (input.searchType) {
-            case 'reports':
+            case "reports":
               results = await exa.searchFinancialReports(`${input.symbol} 10-K 10-Q annual quarterly report`, {
                 numResults,
               });
               break;
-            case 'news':
+            case "news":
               results = await exa.searchNews(`${input.symbol} stock`, {
                 numResults,
                 startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
               });
               break;
-            case 'earnings':
+            case "earnings": {
               const earnings = await exa.getEarningsCallTranscripts(input.symbol, {
                 limit: numResults,
               });
@@ -651,7 +656,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
                 symbol: input.symbol,
                 searchType: input.searchType,
                 resultCount: earnings.length,
-                results: earnings.map(e => ({
+                results: earnings.map((e) => ({
                   title: e.title,
                   url: e.url,
                   date: e.date,
@@ -659,10 +664,11 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
                 })),
                 timestamp: new Date().toISOString(),
               };
-            case 'analyst':
+            }
+            case "analyst":
               results = await exa.getAnalystResearch(input.symbol, { limit: numResults });
               break;
-            case 'competitors':
+            case "competitors":
               results = await exa.getCompetitorAnalysis(input.symbol, { limit: numResults });
               break;
             default:
@@ -674,7 +680,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
             symbol: input.symbol,
             searchType: input.searchType,
             resultCount: results.length,
-            results: results.map(r => ({
+            results: results.map((r) => ({
               title: r.title,
               url: r.url,
               publishedDate: r.publishedDate,
@@ -694,7 +700,8 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
 
     // Polygon.io data tools (ratios require separate Financials add-on - use SEC EDGAR get_financials instead)
     get_polygon_news: {
-      description: "Get news with AI-powered sentiment analysis per ticker. Includes sentiment reasoning. Requires Polygon API key.",
+      description:
+        "Get news with AI-powered sentiment analysis per ticker. Includes sentiment reasoning. Requires Polygon API key.",
       inputSchema: GetPolygonNewsSchema,
       handler: async (input: GetPolygonNewsInput) => {
         if (!polygonApiKey) {
@@ -729,13 +736,14 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
               breakdown: sentimentSummary.sentimentBreakdown,
               articleCount: sentimentSummary.articleCount,
             },
-            articles: articles.slice(0, 10).map(a => ({
+            articles: articles.slice(0, 10).map((a) => ({
               title: a.title,
               source: a.publisher.name,
               publishedAt: a.publishedUtc,
               url: a.articleUrl,
-              sentiment: a.insights.find(i => i.ticker.toUpperCase() === input.symbol.toUpperCase())?.sentiment,
-              sentimentReasoning: a.insights.find(i => i.ticker.toUpperCase() === input.symbol.toUpperCase())?.sentimentReasoning,
+              sentiment: a.insights.find((i) => i.ticker.toUpperCase() === input.symbol.toUpperCase())?.sentiment,
+              sentimentReasoning: a.insights.find((i) => i.ticker.toUpperCase() === input.symbol.toUpperCase())
+                ?.sentimentReasoning,
             })),
             timestamp: new Date().toISOString(),
           };
@@ -749,7 +757,8 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
     },
 
     get_technical_indicators: {
-      description: "Get pre-calculated technical indicators (SMA, EMA, RSI, MACD) for a stock. Requires Polygon API key.",
+      description:
+        "Get pre-calculated technical indicators (SMA, EMA, RSI, MACD) for a stock. Requires Polygon API key.",
       inputSchema: GetTechnicalIndicatorsSchema,
       handler: async (input: GetTechnicalIndicatorsInput) => {
         if (!polygonApiKey) {
@@ -781,16 +790,22 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
                 indicatorsProvider.getSMA(input.symbol, { window: 200, timespan, limit }),
               ]).then(([sma20, sma50, sma200]) => {
                 result.sma = {
-                  sma20: sma20.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
-                  sma50: sma50.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
-                  sma200: sma200.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  sma20: sma20.values
+                    .slice(0, 5)
+                    .map((v) => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  sma50: sma50.values
+                    .slice(0, 5)
+                    .map((v) => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  sma200: sma200.values
+                    .slice(0, 5)
+                    .map((v) => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
                   current: {
                     sma20: sma20.values[0]?.value,
                     sma50: sma50.values[0]?.value,
                     sma200: sma200.values[0]?.value,
                   },
                 };
-              })
+              }),
             );
           }
 
@@ -801,41 +816,56 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
                 indicatorsProvider.getEMA(input.symbol, { window: 26, timespan, limit }),
               ]).then(([ema12, ema26]) => {
                 result.ema = {
-                  ema12: ema12.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
-                  ema26: ema26.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  ema12: ema12.values
+                    .slice(0, 5)
+                    .map((v) => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
+                  ema26: ema26.values
+                    .slice(0, 5)
+                    .map((v) => ({ date: new Date(v.timestamp).toISOString().split("T")[0], value: v.value })),
                   current: {
                     ema12: ema12.values[0]?.value,
                     ema26: ema26.values[0]?.value,
                   },
                 };
-              })
+              }),
             );
           }
 
           if (fetchAll || indicators.includes("rsi")) {
             promises.push(
-              indicatorsProvider.getRSI(input.symbol, { window: 14, timespan, limit }).then(rsi => {
+              indicatorsProvider.getRSI(input.symbol, { window: 14, timespan, limit }).then((rsi) => {
                 const currentRsi = rsi.values[0]?.value;
                 result.rsi = {
                   current: currentRsi,
-                  recent: rsi.values.slice(0, 5).map(v => ({ date: new Date(v.timestamp).toISOString().split("T")[0]!, value: v.value })),
-                  signal: currentRsi !== undefined ? (currentRsi < 30 ? "oversold" : currentRsi > 70 ? "overbought" : "neutral") : "unknown",
+                  recent: rsi.values
+                    .slice(0, 5)
+                    .map((v) => ({ date: new Date(v.timestamp).toISOString().split("T")[0]!, value: v.value })),
+                  signal:
+                    currentRsi !== undefined
+                      ? currentRsi < 30
+                        ? "oversold"
+                        : currentRsi > 70
+                          ? "overbought"
+                          : "neutral"
+                      : "unknown",
                 };
-              })
+              }),
             );
           }
 
           if (fetchAll || indicators.includes("macd")) {
             promises.push(
-              indicatorsProvider.getMACD(input.symbol, { timespan, limit }).then(macd => {
+              indicatorsProvider.getMACD(input.symbol, { timespan, limit }).then((macd) => {
                 const current = macd.values[0];
                 result.macd = {
-                  current: current ? {
-                    macd: current.value,
-                    signal: current.signal,
-                    histogram: current.histogram,
-                  } : null,
-                  recent: macd.values.slice(0, 5).map(v => ({
+                  current: current
+                    ? {
+                        macd: current.value,
+                        signal: current.signal,
+                        histogram: current.histogram,
+                      }
+                    : null,
+                  recent: macd.values.slice(0, 5).map((v) => ({
                     date: new Date(v.timestamp).toISOString().split("T")[0],
                     macd: v.value,
                     signal: v.signal,
@@ -843,7 +873,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
                   })),
                   trend: current ? (current.histogram > 0 ? "bullish" : "bearish") : "unknown",
                 };
-              })
+              }),
             );
           }
 
@@ -888,7 +918,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
             window: sma.window,
             timespan: sma.timespan,
             current: sma.values[0]?.value,
-            values: sma.values.map(v => ({
+            values: sma.values.map((v) => ({
               date: new Date(v.timestamp).toISOString().split("T")[0],
               value: v.value,
             })),
@@ -904,7 +934,8 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
     },
 
     get_company_info: {
-      description: "Get detailed company information including description, industry (SIC code), market cap, employee count, and more. Requires Polygon API key.",
+      description:
+        "Get detailed company information including description, industry (SIC code), market cap, employee count, and more. Requires Polygon API key.",
       inputSchema: GetCompanyInfoSchema,
       handler: async (input: GetCompanyInfoInput) => {
         if (!polygonApiKey) {
@@ -937,7 +968,9 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
                 // Company info
                 homepageUrl: d.homepageUrl,
                 phoneNumber: d.phoneNumber,
-                address: d.address ? `${d.address.address1 || ""}, ${d.address.city || ""}, ${d.address.state || ""} ${d.address.postalCode || ""}`.trim() : undefined,
+                address: d.address
+                  ? `${d.address.address1 || ""}, ${d.address.city || ""}, ${d.address.state || ""} ${d.address.postalCode || ""}`.trim()
+                  : undefined,
                 // Dates
                 listDate: d.listDate,
                 active: d.active,
@@ -969,7 +1002,8 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
     ...(memoryTools || {}),
 
     search_tickers: {
-      description: "Search for stock tickers by company name, or filter by type/exchange. Useful for discovering new stocks to add to the trading universe. Requires Polygon API key.",
+      description:
+        "Search for stock tickers by company name, or filter by type/exchange. Useful for discovering new stocks to add to the trading universe. Requires Polygon API key.",
       inputSchema: SearchTickersSchema,
       handler: async (input: SearchTickersInput) => {
         if (!polygonApiKey) {
@@ -996,7 +1030,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
           return {
             success: true,
             count: results.length,
-            tickers: results.map(t => ({
+            tickers: results.map((t) => ({
               ticker: t.ticker,
               name: t.name,
               type: t.type,

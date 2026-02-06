@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import { useState } from "react";
 
 interface MaskedInputProps {
   label: string;
@@ -9,13 +9,7 @@ interface MaskedInputProps {
   validate?: (value: string) => string | null; // Returns error message or null
 }
 
-export function MaskedInput({
-  label,
-  placeholder = "",
-  masked = false,
-  onSubmit,
-  validate,
-}: MaskedInputProps) {
+export function MaskedInput({ label, placeholder = "", masked = false, onSubmit, validate }: MaskedInputProps) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -43,10 +37,7 @@ export function MaskedInput({
   return (
     <Box flexDirection="column">
       <Text>
-        {label}:{" "}
-        <Text color="cyan">
-          {displayValue || <Text color="gray">{placeholder}</Text>}
-        </Text>
+        {label}: <Text color="cyan">{displayValue || <Text color="gray">{placeholder}</Text>}</Text>
         <Text color="cyan">▋</Text>
       </Text>
       {error && (

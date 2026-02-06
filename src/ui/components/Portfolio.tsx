@@ -1,7 +1,6 @@
-import React from "react";
-import { Box, Text } from "ink";
 import * as asciichart from "asciichart";
-import { PortfolioState, Position } from "../../portfolio/types.js";
+import { Box, Text } from "ink";
+import type { PortfolioState, Position } from "../../portfolio/types.js";
 
 interface PortfolioProps {
   portfolio: PortfolioState;
@@ -9,12 +8,12 @@ interface PortfolioProps {
 }
 
 function formatCurrency(value: number): string {
-  return "$" + value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatPercent(value: number): string {
   const sign = value >= 0 ? "+" : "";
-  return sign + (value * 100).toFixed(2) + "%";
+  return `${sign + (value * 100).toFixed(2)}%`;
 }
 
 export function Portfolio({ portfolio, equityHistory }: PortfolioProps) {
@@ -48,21 +47,15 @@ export function Portfolio({ portfolio, equityHistory }: PortfolioProps) {
         </Box>
         <Box flexDirection="column" marginRight={4}>
           <Text bold>Day P&L</Text>
-          <Text color={portfolio.dailyPnL >= 0 ? "green" : "red"}>
-            {formatCurrency(portfolio.dailyPnL)}
-          </Text>
+          <Text color={portfolio.dailyPnL >= 0 ? "green" : "red"}>{formatCurrency(portfolio.dailyPnL)}</Text>
         </Box>
         <Box flexDirection="column" marginRight={4}>
           <Text bold>Week P&L</Text>
-          <Text color={portfolio.weeklyPnL >= 0 ? "green" : "red"}>
-            {formatCurrency(portfolio.weeklyPnL)}
-          </Text>
+          <Text color={portfolio.weeklyPnL >= 0 ? "green" : "red"}>{formatCurrency(portfolio.weeklyPnL)}</Text>
         </Box>
         <Box flexDirection="column">
           <Text bold>Total P&L</Text>
-          <Text color={portfolio.totalPnL >= 0 ? "green" : "red"}>
-            {formatCurrency(portfolio.totalPnL)}
-          </Text>
+          <Text color={portfolio.totalPnL >= 0 ? "green" : "red"}>{formatCurrency(portfolio.totalPnL)}</Text>
         </Box>
       </Box>
 
