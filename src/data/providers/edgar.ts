@@ -47,15 +47,6 @@ interface CompanyTickerEntry {
   title: string;
 }
 
-interface EdgarFilingEntry {
-  accessionNumber: string;
-  filingDate: string;
-  reportDate: string;
-  form: string;
-  primaryDocument: string;
-  primaryDocDescription: string;
-}
-
 interface EdgarFilingsResponse {
   cik: string;
   filings: {

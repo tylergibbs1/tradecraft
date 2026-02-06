@@ -19,6 +19,7 @@ import * as path from "node:path";
 import { AttributionEngine } from "../src/attribution/engine.js";
 import { BacktestEngine } from "../src/backtest/engine.js";
 import type { BacktestConfig, BacktestResult } from "../src/backtest/types.js";
+import type { DataProvider } from "../src/config/schema.js";
 import { DataManager } from "../src/data/index.js";
 import { compileStrategy, validateSpec } from "../src/evolution/compiler.js";
 import { combineStrategies, mutateStrategy } from "../src/evolution/engine.js";
@@ -159,7 +160,7 @@ async function main() {
   console.log("─── Fetching Market Data ───────────────────────────────────\n");
   const polygonKey = process.env.POLYGON_API_KEY;
   const provider = polygonKey ? "polygon" : "yahoo";
-  const dm = new DataManager(provider as any, polygonKey);
+  const dm = new DataManager(provider as DataProvider, polygonKey);
   console.log(`  Provider: ${provider}\n`);
   for (const sym of SYMBOLS) {
     const bars = await dm.getHistory(sym, "1d", START, END);

@@ -22,18 +22,6 @@ interface NewsProviderConfig {
   exaApiKey?: string;
 }
 
-interface YahooNewsResponse {
-  items: {
-    result: Array<{
-      title: string;
-      publisher: string;
-      link: string;
-      providerPublishTime: number;
-      summary?: string;
-    }>;
-  };
-}
-
 interface AlphaVantageNewsResponse {
   feed?: Array<{
     title: string;

@@ -33,7 +33,7 @@ export function RadioSelect<T>({ options, onSelect, defaultValue }: RadioSelectP
   return (
     <Box flexDirection="column">
       {options.map((option, index) => (
-        <Box key={`option-${index}`}>
+        <Box key={`option-${String(option.value)}`}>
           <Text color={index === selectedIndex ? "cyan" : "white"}>
             {index === selectedIndex ? "❯ " : "  "}
             {option.label}

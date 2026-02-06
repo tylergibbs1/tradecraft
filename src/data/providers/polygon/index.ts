@@ -35,7 +35,7 @@ async function polygonFetch(
   path: string,
   apiKey: string,
   params?: Record<string, string | number | boolean | undefined>,
-): Promise<any> {
+): Promise<Record<string, unknown>> {
   const url = new URL(path, POLYGON_BASE);
   url.searchParams.set("apiKey", apiKey);
   if (params) {
@@ -48,7 +48,7 @@ async function polygonFetch(
     const text = await resp.text();
     throw new Error(`Polygon API error ${resp.status}: ${text}`);
   }
-  return resp.json();
+  return resp.json() as Promise<Record<string, unknown>>;
 }
 
 const TIMEFRAME_MAP: Record<TimeFrame, { multiplier: number; timespan: string }> = {
@@ -125,13 +125,13 @@ export class PolygonQuotesProvider implements DataProviderInterface {
       return [];
     }
 
-    return json.results.map((bar: any) => ({
-      timestamp: bar.t,
-      open: bar.o,
-      high: bar.h,
-      low: bar.l,
-      close: bar.c,
-      volume: bar.v,
+    return json.results.map((bar: Record<string, unknown>) => ({
+      timestamp: bar.t as number,
+      open: bar.o as number,
+      high: bar.h as number,
+      low: bar.l as number,
+      close: bar.c as number,
+      volume: bar.v as number,
     }));
   }
 
@@ -193,20 +193,20 @@ export class PolygonNewsProvider {
     }
 
     const json = await polygonFetch("/v2/reference/news", this.apiKey, params);
-    return (json.results ?? []).map((a: any) => ({
-      id: a.id,
-      title: a.title,
-      author: a.author,
-      publishedUtc: a.published_utc,
-      articleUrl: a.article_url,
-      publisher: a.publisher ?? { name: "Unknown" },
-      tickers: a.tickers ?? [],
-      description: a.description,
-      keywords: a.keywords,
-      insights: (a.insights ?? []).map((i: any) => ({
-        ticker: i.ticker,
-        sentiment: i.sentiment,
-        sentimentReasoning: i.sentiment_reasoning,
+    return (json.results ?? []).map((a: Record<string, unknown>) => ({
+      id: a.id as string,
+      title: a.title as string,
+      author: a.author as string,
+      publishedUtc: a.published_utc as string,
+      articleUrl: a.article_url as string,
+      publisher: (a.publisher as Record<string, unknown>) ?? { name: "Unknown" },
+      tickers: (a.tickers as string[]) ?? [],
+      description: a.description as string | undefined,
+      keywords: a.keywords as string[] | undefined,
+      insights: ((a.insights as Record<string, unknown>[]) ?? []).map((i: Record<string, unknown>) => ({
+        ticker: i.ticker as string,
+        sentiment: i.sentiment as string,
+        sentimentReasoning: i.sentiment_reasoning as string,
       })),
     }));
   }
@@ -302,9 +302,9 @@ export class PolygonIndicatorsProvider {
       ticker: symbol.toUpperCase(),
       window,
       timespan,
-      values: (json.results?.values ?? []).map((v: any) => ({
-        timestamp: v.timestamp,
-        value: v.value,
+      values: (json.results?.values ?? []).map((v: Record<string, unknown>) => ({
+        timestamp: v.timestamp as number,
+        value: v.value as number,
       })),
     };
   }
@@ -330,9 +330,9 @@ export class PolygonIndicatorsProvider {
       ticker: symbol.toUpperCase(),
       window,
       timespan,
-      values: (json.results?.values ?? []).map((v: any) => ({
-        timestamp: v.timestamp,
-        value: v.value,
+      values: (json.results?.values ?? []).map((v: Record<string, unknown>) => ({
+        timestamp: v.timestamp as number,
+        value: v.value as number,
       })),
     };
   }
@@ -358,9 +358,9 @@ export class PolygonIndicatorsProvider {
       ticker: symbol.toUpperCase(),
       window,
       timespan,
-      values: (json.results?.values ?? []).map((v: any) => ({
-        timestamp: v.timestamp,
-        value: v.value,
+      values: (json.results?.values ?? []).map((v: Record<string, unknown>) => ({
+        timestamp: v.timestamp as number,
+        value: v.value as number,
       })),
     };
   }
@@ -392,11 +392,11 @@ export class PolygonIndicatorsProvider {
     return {
       ticker: symbol.toUpperCase(),
       timespan,
-      values: (json.results?.values ?? []).map((v: any) => ({
-        timestamp: v.timestamp,
-        value: v.value,
-        signal: v.signal,
-        histogram: v.histogram,
+      values: (json.results?.values ?? []).map((v: Record<string, unknown>) => ({
+        timestamp: v.timestamp as number,
+        value: v.value as number,
+        signal: v.signal as number,
+        histogram: v.histogram as number,
       })),
     };
   }
@@ -516,13 +516,13 @@ export class PolygonTickersProvider {
       order: options.order ?? "asc",
     });
 
-    return (json.results ?? []).map((r: any) => ({
-      ticker: r.ticker,
-      name: r.name,
-      type: r.type,
-      primaryExchange: r.primary_exchange,
-      active: r.active,
-      market: r.market,
+    return (json.results ?? []).map((r: Record<string, unknown>) => ({
+      ticker: r.ticker as string,
+      name: r.name as string,
+      type: r.type as string | undefined,
+      primaryExchange: r.primary_exchange as string | undefined,
+      active: r.active as boolean | undefined,
+      market: r.market as string | undefined,
     }));
   }
 

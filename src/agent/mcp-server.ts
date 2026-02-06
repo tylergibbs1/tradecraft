@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { DataManager, Quote } from "../data/index.js";
 import { getEdgarProvider } from "../data/providers/edgar.js";
-import { type ExaCategory, getExaProvider } from "../data/providers/exa.js";
+import { type ExaCategory, type ExaSearchResult, getExaProvider } from "../data/providers/exa.js";
 import { getNewsProvider } from "../data/providers/news.js";
 import {
   getPolygonIndicatorsProvider,
@@ -634,7 +634,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
           const exa = getExaProvider();
           const numResults = input.numResults || 10;
 
-          let results;
+          let results: ExaSearchResult[];
           switch (input.searchType) {
             case "reports":
               results = await exa.searchFinancialReports(`${input.symbol} 10-K 10-Q annual quarterly report`, {

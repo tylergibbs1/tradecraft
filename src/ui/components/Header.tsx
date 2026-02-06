@@ -57,7 +57,7 @@ export function Header({ agentState, equity, dailyPnL, activeTab, agentMode }: H
       </Box>
       <Box marginTop={1}>
         {TAB_NAMES.map((name, i) => (
-          <Box key={`tab-${i}`} marginRight={2}>
+          <Box key={name} marginRight={2}>
             <Text color={i === activeTab ? "cyan" : "gray"} bold={i === activeTab}>
               [{i + 1}] {name}
             </Text>

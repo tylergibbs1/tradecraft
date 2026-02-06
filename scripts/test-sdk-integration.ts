@@ -29,7 +29,7 @@ const testOptions: Options = {
             _toolUseID: string | undefined,
             _opts: { signal: AbortSignal },
           ): Promise<HookJSONOutput> => {
-            console.log("PreToolUse hook called for tool:", (input as any).tool_name);
+            console.log("PreToolUse hook called for tool:", (input as Record<string, unknown>).tool_name);
             return { continue: true };
           },
         ],

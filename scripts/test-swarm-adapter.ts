@@ -10,6 +10,9 @@
 import { SwarmTradingAgent } from "../src/agent/swarm-adapter.js";
 import type { AgentCycleResult, AgentMessage, AgentState } from "../src/agent/types.js";
 import { defaultConfig } from "../src/config/index.js";
+import type { DataManager } from "../src/data/index.js";
+import type { PortfolioManager } from "../src/portfolio/manager.js";
+import type { RiskMonitor } from "../src/risk/monitor.js";
 
 console.log("Testing Swarm Trading Agent Adapter\n");
 console.log("=".repeat(50));
@@ -41,9 +44,9 @@ try {
   try {
     const _agent = new SwarmTradingAgent({
       config: { ...testConfig, anthropicApiKey: undefined },
-      portfolioManager: null as any,
-      riskMonitor: null as any,
-      dataManager: null as any,
+      portfolioManager: null as unknown as PortfolioManager,
+      riskMonitor: null as unknown as RiskMonitor,
+      dataManager: null as unknown as DataManager,
     });
     console.log("   ✗ Should have thrown without API key");
   } catch (e) {

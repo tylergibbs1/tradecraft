@@ -56,8 +56,8 @@ async function main() {
     const text = response.content[0]?.type === "text" ? response.content[0].text : "";
     console.log(`   ✓ Response: ${text}`);
     console.log(`   Tokens: ${response.usage.input_tokens} in, ${response.usage.output_tokens} out`);
-  } catch (error: any) {
-    console.log(`   ✗ Error: ${error.message || error}`);
+  } catch (error: unknown) {
+    console.log(`   ✗ Error: ${error instanceof Error ? error.message : error}`);
   }
 
   console.log("\n========================");

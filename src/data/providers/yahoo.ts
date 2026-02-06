@@ -26,23 +26,27 @@ export class YahooDataProvider implements DataProviderInterface {
       throw new Error(`Yahoo Finance quote failed for ${symbol}: ${resp.status}`);
     }
 
-    const json = (await resp.json()) as any;
-    const result = json?.chart?.result?.[0];
+    const json = (await resp.json()) as Record<string, unknown>;
+    const chart = json?.chart as Record<string, unknown> | undefined;
+    const result = (chart?.result as Record<string, unknown>[] | undefined)?.[0];
     if (!result) {
       throw new Error(`No quote data for ${symbol}`);
     }
 
-    const meta = result.meta;
-    const quote = result.indicators?.quote?.[0];
-    const lastIndex = (quote?.close?.length ?? 1) - 1;
+    const meta = result.meta as Record<string, unknown>;
+    const indicators = result.indicators as Record<string, unknown> | undefined;
+    const quotes = indicators?.quote as Record<string, unknown>[] | undefined;
+    const quote = quotes?.[0];
+    const closeArr = quote?.close as number[] | undefined;
+    const lastIndex = (closeArr?.length ?? 1) - 1;
 
     return {
-      symbol: meta.symbol,
-      last: meta.regularMarketPrice ?? quote?.close?.[lastIndex] ?? 0,
+      symbol: meta.symbol as string,
+      last: (meta.regularMarketPrice as number) ?? closeArr?.[lastIndex] ?? 0,
       bid: undefined,
       ask: undefined,
-      volume: meta.regularMarketVolume ?? quote?.volume?.[lastIndex] ?? 0,
-      timestamp: (meta.regularMarketTime ?? Math.floor(Date.now() / 1000)) * 1000,
+      volume: (meta.regularMarketVolume as number) ?? (quote?.volume as number[])?.[lastIndex] ?? 0,
+      timestamp: ((meta.regularMarketTime as number) ?? Math.floor(Date.now() / 1000)) * 1000,
     };
   }
 
@@ -63,22 +67,30 @@ export class YahooDataProvider implements DataProviderInterface {
       throw new Error(`Yahoo Finance history failed for ${symbol}: ${resp.status}`);
     }
 
-    const json = (await resp.json()) as any;
-    const result = json?.chart?.result?.[0];
+    const json = (await resp.json()) as Record<string, unknown>;
+    const chart = json?.chart as Record<string, unknown> | undefined;
+    const result = (chart?.result as Record<string, unknown>[] | undefined)?.[0];
     if (!result) {
       throw new Error(`No history data for ${symbol}`);
     }
 
-    const timestamps: number[] = result.timestamp ?? [];
-    const quote = result.indicators?.quote?.[0] ?? {};
+    const timestamps: number[] = (result.timestamp as number[]) ?? [];
+    const indicators = result.indicators as Record<string, unknown> | undefined;
+    const quotes = indicators?.quote as Record<string, unknown>[] | undefined;
+    const quote = quotes?.[0] ?? {};
+    const openArr = quote.open as number[] | undefined;
+    const highArr = quote.high as number[] | undefined;
+    const lowArr = quote.low as number[] | undefined;
+    const closeArr = quote.close as number[] | undefined;
+    const volumeArr = quote.volume as number[] | undefined;
 
     const bars: OHLCV[] = [];
     for (let i = 0; i < timestamps.length; i++) {
-      const open = quote.open?.[i];
-      const high = quote.high?.[i];
-      const low = quote.low?.[i];
-      const close = quote.close?.[i];
-      const volume = quote.volume?.[i];
+      const open = openArr?.[i];
+      const high = highArr?.[i];
+      const low = lowArr?.[i];
+      const close = closeArr?.[i];
+      const volume = volumeArr?.[i];
 
       if (open != null && high != null && low != null && close != null) {
         bars.push({

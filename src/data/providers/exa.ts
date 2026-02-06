@@ -170,7 +170,7 @@ export class ExaDataProvider {
       searchOptions.endPublishedDate = options.endDate.toISOString();
     }
 
-    const result = await this.client.search(query, searchOptions as any);
+    const result = await this.client.search(query, searchOptions as Record<string, unknown>);
     return this.mapResults(result.results);
   }
 
@@ -324,7 +324,7 @@ export class ExaDataProvider {
     }
   }
 
-  private mapResults(results: any[]): ExaSearchResult[] {
+  private mapResults(results: Record<string, unknown>[]): ExaSearchResult[] {
     return results.map((r) => ({
       url: r.url,
       title: r.title || "Untitled",

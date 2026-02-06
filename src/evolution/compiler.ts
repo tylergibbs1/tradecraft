@@ -314,7 +314,9 @@ export function validateSpec(spec: StrategySpec): { valid: boolean; errors: stri
       if (!l.conditions || l.conditions.length === 0) {
         errors.push(`${path}: logic node requires conditions`);
       }
-      l.conditions?.forEach((c, i) => validateRule(c, `${path}.conditions[${i}]`));
+      for (let i = 0; i < (l.conditions?.length ?? 0); i++) {
+        validateRule(l.conditions![i]!, `${path}.conditions[${i}]`);
+      }
     } else {
       errors.push(`${path}: unknown kind "${rule.kind}"`);
     }
