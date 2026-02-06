@@ -34,6 +34,9 @@ export function loadConfig(): Config {
   if (process.env.ALPHAVANTAGE_API_KEY) {
     envConfig.dataProviderApiKey = process.env.ALPHAVANTAGE_API_KEY;
   }
+  if (process.env.AGENT_MODE === "swarm" || process.env.AGENT_MODE === "single") {
+    envConfig.agentMode = process.env.AGENT_MODE;
+  }
 
   // Load from file if exists
   if (configExists()) {

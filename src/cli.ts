@@ -8,6 +8,8 @@ import { PortfolioManager } from "./portfolio/manager.js";
 import { RiskMonitor } from "./risk/monitor.js";
 import { DataManager } from "./data/index.js";
 import { TradingAgent } from "./agent/index.js";
+import { ITradingAgent } from "./agent/types.js";
+import { SwarmTradingAgent } from "./agent/swarm-adapter.js";
 
 const HELP = `
 Tradecraft CLI - Autonomous Trading System
@@ -256,6 +258,24 @@ async function showRiskStatus(
   console.log("");
 }
 
+function createAgent(
+  config: ReturnType<typeof loadConfig>,
+  portfolioManager: PortfolioManager,
+  riskMonitor: RiskMonitor,
+  dataManager: DataManager,
+  callbacks: {
+    onStateChange?: (state: import("./agent/types.js").AgentState) => void;
+    onMessage?: (message: import("./agent/types.js").AgentMessage) => void;
+    onCycleComplete?: (result: import("./agent/types.js").AgentCycleResult) => void;
+  }
+): ITradingAgent {
+  const deps = { config, portfolioManager, riskMonitor, dataManager };
+  if (config.agentMode === "swarm") {
+    return new SwarmTradingAgent(deps, callbacks);
+  }
+  return new TradingAgent(deps, callbacks);
+}
+
 async function runCycle(
   config: ReturnType<typeof loadConfig>,
   portfolioManager: PortfolioManager,
@@ -266,24 +286,23 @@ async function runCycle(
   console.log("║                 RUNNING TRADING CYCLE                      ║");
   console.log("╚════════════════════════════════════════════════════════════╝\n");
 
-  const agent = new TradingAgent(
-    { config, portfolioManager, riskMonitor, dataManager },
-    {
-      onMessage: (msg) => {
-        const prefix = {
-          system: "[SYS]",
-          assistant: "[AGT]",
-          tool_use: "[TUL]",
-          tool_result: "[RES]",
-          error: "[ERR]",
-          user: "[USR]",
-        }[msg.type] || "[???]";
+  console.log(`Mode: ${config.agentMode.toUpperCase()}\n`);
 
-        const content = msg.content.length > 120 ? msg.content.slice(0, 120) + "..." : msg.content;
-        console.log(`${prefix} ${content}`);
-      },
-    }
-  );
+  const agent = createAgent(config, portfolioManager, riskMonitor, dataManager, {
+    onMessage: (msg) => {
+      const prefix = {
+        system: "[SYS]",
+        assistant: "[AGT]",
+        tool_use: "[TUL]",
+        tool_result: "[RES]",
+        error: "[ERR]",
+        user: "[USR]",
+      }[msg.type] || "[???]";
+
+      const content = msg.content.length > 120 ? msg.content.slice(0, 120) + "..." : msg.content;
+      console.log(`${prefix} ${content}`);
+    },
+  });
 
   console.log("Starting cycle...\n");
   const result = await agent.runSingleCycle();
@@ -313,6 +332,7 @@ async function startAgent(
   console.log("║              STARTING AUTONOMOUS AGENT                     ║");
   console.log("╚════════════════════════════════════════════════════════════╝\n");
 
+  console.log(`Mode: ${config.agentMode.toUpperCase()}`);
   console.log(`Model: ${config.agentParams.model}`);
   console.log(`Cycle Interval: ${config.agentParams.cycleIntervalMs / 1000}s`);
   console.log(`Max Turns: ${config.agentParams.maxTurns}`);
@@ -320,31 +340,28 @@ async function startAgent(
   console.log("\nPress Ctrl+C to stop\n");
   console.log("─".repeat(60));
 
-  const agent = new TradingAgent(
-    { config, portfolioManager, riskMonitor, dataManager },
-    {
-      onStateChange: (state) => {
-        console.log(`\n[STATE] Agent state: ${state.toUpperCase()}`);
-      },
-      onMessage: (msg) => {
-        const prefix = {
-          system: "[SYS]",
-          assistant: "[AGT]",
-          tool_use: "[TUL]",
-          tool_result: "[RES]",
-          error: "[ERR]",
-          user: "[USR]",
-        }[msg.type] || "[???]";
+  const agent = createAgent(config, portfolioManager, riskMonitor, dataManager, {
+    onStateChange: (state) => {
+      console.log(`\n[STATE] Agent state: ${state.toUpperCase()}`);
+    },
+    onMessage: (msg) => {
+      const prefix = {
+        system: "[SYS]",
+        assistant: "[AGT]",
+        tool_use: "[TUL]",
+        tool_result: "[RES]",
+        error: "[ERR]",
+        user: "[USR]",
+      }[msg.type] || "[???]";
 
-        const content = msg.content.length > 100 ? msg.content.slice(0, 100) + "..." : msg.content;
-        console.log(`${prefix} ${content}`);
-      },
-      onCycleComplete: (result) => {
-        console.log(`\n[CYCLE] Complete: ${result.turnsUsed} turns, ${result.ordersPlaced} orders, $${result.costUsd.toFixed(4)}`);
-        console.log("─".repeat(60));
-      },
-    }
-  );
+      const content = msg.content.length > 100 ? msg.content.slice(0, 100) + "..." : msg.content;
+      console.log(`${prefix} ${content}`);
+    },
+    onCycleComplete: (result) => {
+      console.log(`\n[CYCLE] Complete: ${result.turnsUsed} turns, ${result.ordersPlaced} orders, $${result.costUsd.toFixed(4)}`);
+      console.log("─".repeat(60));
+    },
+  });
 
   // Handle Ctrl+C
   process.on("SIGINT", () => {
@@ -420,7 +437,7 @@ async function placeOrder(
   portfolioManager.submitOrder(order.id);
 
   // Fill immediately (paper trading)
-  const fillPrice = side === "buy" ? quote.ask : quote.bid;
+  const fillPrice = side === "buy" ? (quote.ask ?? quote.last) : (quote.bid ?? quote.last);
   const result = portfolioManager.fillOrder(order.id, fillPrice);
 
   if (result) {

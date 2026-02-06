@@ -7,6 +7,7 @@ interface HeaderProps {
   equity: number;
   dailyPnL: number;
   activeTab: number;
+  agentMode?: "single" | "swarm";
 }
 
 const STATE_COLORS: Record<AgentState, string> = {
@@ -25,9 +26,11 @@ const STATE_ICONS: Record<AgentState, string> = {
 
 const TAB_NAMES = ["Portfolio", "Trades", "Journal", "Agent Log"];
 
-export function Header({ agentState, equity, dailyPnL, activeTab }: HeaderProps) {
+export function Header({ agentState, equity, dailyPnL, activeTab, agentMode }: HeaderProps) {
   const pnlColor = dailyPnL >= 0 ? "green" : "red";
   const pnlSign = dailyPnL >= 0 ? "+" : "";
+  const modeLabel = (agentMode ?? "single").toUpperCase();
+  const modeColor = agentMode === "swarm" ? "magenta" : "blue";
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -40,6 +43,8 @@ export function Header({ agentState, equity, dailyPnL, activeTab }: HeaderProps)
           <Text color={STATE_COLORS[agentState]}>
             {STATE_ICONS[agentState]} {agentState.toUpperCase()}
           </Text>
+          <Text color="gray"> │ </Text>
+          <Text color={modeColor}>{modeLabel}</Text>
         </Box>
         <Box>
           <Text>Equity: </Text>

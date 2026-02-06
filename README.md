@@ -1,6 +1,6 @@
 # Tradecraft
 
-An autonomous trading system powered by Claude. The AI agent analyzes market data, makes trading decisions, and executes trades—all within hard risk limits enforced at the infrastructure level.
+An AI-native trading system powered by Claude. A swarm of AI agents invents, backtests, and evolves novel trading strategies autonomously, then executes trades within hard risk limits enforced at the infrastructure level.
 
 ```
 ╔════════════════════════════════════════════════════════════╗
@@ -26,8 +26,12 @@ Positions:
 ## Features
 
 - **Autonomous Trading**: Claude analyzes markets and executes trades independently
-- **Risk Management**: Hard limits on position size, daily loss, drawdown—enforced by system, not prompts
-- **Paper Trading**: Safe simulation with real market data from Yahoo Finance
+- **Strategy Evolution**: AI invents strategies as JSON DSL, backtests them, evolves winners via genetic mutation
+- **Multi-Agent Swarm**: Specialist agents (technical, fundamental, macro, sentiment) collaborate via signal bus with performance-weighted voting
+- **Cross-Cycle Memory**: Persistent memory accumulates market insights across trading cycles
+- **Performance Attribution**: Tracks which agents/signals drive returns and auto-tunes weights
+- **Risk Management**: Hard limits on position size, daily loss, drawdown. Enforced by system, not prompts
+- **Paper Trading**: Safe simulation with real market data from Polygon.io or Yahoo Finance
 - **CLI Interface**: Non-interactive commands for easy automation
 - **Agent Backtesting**: Test the actual Claude agent on historical data
 - **Full Audit Trail**: Every decision logged for review
@@ -56,7 +60,7 @@ bun run cli history
 - [Bun](https://bun.sh) runtime
 - Anthropic API key
 - Internet connection (for market data)
-- Polygon.io API key (optional — enables real-time quotes, news sentiment, technical indicators, and company data)
+- Polygon.io API key (optional, enables real-time quotes, news sentiment, technical indicators, and company data)
 
 ## Installation
 
@@ -100,6 +104,13 @@ maxOrderValue = 10000      # $10k max order
 [capital]
 initialCapital = 100000
 paperTrading = true
+
+agentMode = "single"  # or "swarm" for multi-agent mode
+
+[swarmParams]
+specialistModel = "claude-sonnet-4-5-20250929"
+parallelSpecialists = true
+minConsensusConfidence = 0.5
 ```
 
 You can also set API keys via environment variables (`ANTHROPIC_API_KEY`, `POLYGON_API_KEY`) or a `.env` file.
@@ -127,27 +138,27 @@ You can also set API keys via environment variables (`ANTHROPIC_API_KEY`, `POLYG
 │                     bun run cli <command>                        │
 └─────────────────────────────────────────────────────────────────┘
                                 │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        TradingAgent                              │
-│  • Builds prompts with portfolio state and market context        │
-│  • Sends requests to Claude API                                  │
-│  • Processes tool calls and executes trades                      │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                ┌───────────────┼───────────────┐
-                ▼               ▼               ▼
-┌───────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│ Portfolio Manager │ │  Data Manager   │ │  Risk Monitor   │
-│                   │ │                 │ │                 │
-│ • Positions       │ │ • Polygon.io    │ │ • Position size │
-│ • Cash balance    │ │ • Yahoo Finance │ │ • Loss limits   │
-│ • Order execution │ │ • OHLCV + Quote │ │ • Circuit break │
-│ • P&L tracking    │ │ • In-mem cache  │ │                 │
-└───────────────────┘ └─────────────────┘ └─────────────────┘
-         │                    │                    │
-         ▼                    ▼                    ▼
-   positions.json     Polygon / Yahoo      circuit_breaker.json
+                    ┌───────────┴───────────┐
+                    ▼                       ▼
+┌───────────────────────────┐ ┌───────────────────────────┐
+│   TradingAgent (single)   │ │  SwarmTradingAgent (swarm) │
+│                           │ │                           │
+│ • Claude analyzes markets │ │ • Specialist agents vote  │
+│ • Calls tools directly    │ │ • Signal bus aggregation  │
+│ • Makes trade decisions   │ │ • Consensus trading       │
+└───────────────────────────┘ └───────────────────────────┘
+                    │                       │
+                    └───────────┬───────────┘
+        ┌───────────┬──────────┼──────────┬───────────┐
+        ▼           ▼          ▼          ▼           ▼
+┌────────────┐┌──────────┐┌────────┐┌──────────┐┌──────────┐
+│ Portfolio  ││   Data   ││  Risk  ││Evolution ││  Memory  │
+│ Manager    ││ Manager  ││Monitor ││ Engine   ││  Store   │
+│            ││          ││        ││          ││          │
+│• Positions ││• Polygon ││• Limits││• DSL     ││• Insights│
+│• Orders    ││• Yahoo   ││• Break ││• Mutate  ││• Query   │
+│• P&L       ││• Cache   ││        ││• Score   ││• Attrib. │
+└────────────┘└──────────┘└────────┘└──────────┘└──────────┘
 ```
 
 ### Trading Cycle Flow
@@ -238,6 +249,14 @@ You can also set API keys via environment variables (`ANTHROPIC_API_KEY`, `POLYG
 | `get_financials` | Financial statements from SEC filings |
 | `get_news` | General financial news search |
 | `exa_search` / `exa_financial_search` | AI-powered web search (Exa) |
+| `propose_strategy` | Propose a new strategy as JSON DSL |
+| `backtest_strategy` | Backtest a strategy against historical data |
+| `evolve_strategy` | Evolve a strategy through genetic mutation |
+| `deploy_strategy` | Deploy a top-performing strategy |
+| `record_insight` | Save a market insight to cross-cycle memory |
+| `query_memories` | Query accumulated market insights |
+| `get_attribution` | View trade-to-signal P&L attribution |
+| `get_agent_performance` | View per-agent accuracy and weight adjustments |
 
 ### Key Design Principle
 
@@ -306,12 +325,38 @@ Agent performance on historical data (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/
 | H2 2024 | **+2.19%** | ~8% | 57.1% | 1.14 | 9.19% | $2.48 |
 | Full 2024 | **+28.26%** | ~24% | 87.8% | 4.46 | 9.73% | $4.92 |
 
-**Key observations:**
-- Outperformed S&P 500 for full year 2024 (+28% vs ~24%)
-- Strong performance in bull markets (H1) with aggressive NVDA positioning
-- Capital preservation in volatile periods (H2) by cutting losers early
-- High win rate (87.8%) from selective, disciplined trading
-- Low cost (~$5 for a full year of weekly decisions)
+### Strategy Evolution Benchmark
+
+End-to-end benchmark with real Polygon.io data (AAPL/GOOGL/MSFT, Jan–Dec 2024, $100k capital). The evolution engine invents strategies as JSON, backtests against real prices, and evolves winners through genetic mutation.
+
+**Base strategies (Generation 0):**
+
+| Strategy | Return | Sharpe | Win Rate | Max Drawdown | Trades |
+|----------|--------|--------|----------|--------------|--------|
+| SMA 10/50 Crossover | +8.05% | 1.64 | 71.4% | 2.11% | 16 |
+| RSI Oversold Bounce | +1.62% | 0.89 | 66.7% | 1.71% | 6 |
+| EMA 12/26 Momentum | +10.59% | 1.77 | 83.3% | 2.73% | 14 |
+
+**After 2 generations of evolution (5 mutations + 1 crossover per generation):**
+
+| Champion | Return | Sharpe | Win Rate | Max Drawdown | Profit Factor |
+|----------|--------|--------|----------|--------------|---------------|
+| EMA 12/26 Momentum (evolved) | **+12.61%** | **1.88** | 83.3% | 2.41% | 12.35 |
+
+**Performance attribution (real trade P&L):**
+
+| Agent | Trades | Accuracy | Attributed P&L |
+|-------|--------|----------|----------------|
+| ema-momentum | 12 | 83% | $17,573 |
+| sma-crossover | 14 | 71% | $14,326 |
+| rsi-reversal | 6 | 67% | $3,238 |
+
+All numbers are from real backtests against real Polygon.io market data. No synthetic or mocked data.
+
+```bash
+# Run the benchmark yourself
+bun run scripts/benchmark.ts
+```
 
 *Note: Backtests have inherent limitations. Past performance does not guarantee future results.*
 
@@ -322,17 +367,24 @@ tradecraft/
 ├── src/
 │   ├── agent/              # Trading agent and tools
 │   │   ├── index.ts        # TradingAgent class
-│   │   ├── mcp-server.ts   # Tool definitions (orders, data, risk, Polygon, Exa, EDGAR)
+│   │   ├── mcp-server.ts   # Tool definitions (orders, data, risk, evolution, memory)
 │   │   ├── permissions.ts  # canUseTool risk validation
 │   │   ├── hooks.ts        # Pre/post tool hooks for audit logging
-│   │   └── prompts.ts      # System and cycle prompts
+│   │   ├── prompts.ts      # System and cycle prompts
+│   │   ├── types.ts        # ITradingAgent interface
+│   │   └── swarm-adapter.ts # SwarmTradingAgent adapter for multi-agent mode
 │   ├── agents/             # Multi-agent specialist system
 │   │   ├── specialists/    # Technical, fundamental, macro, sentiment, hypothesis agents
 │   │   ├── portfolio-manager.ts
 │   │   └── signal-bus.ts
+│   ├── attribution/        # Performance attribution engine
+│   │   ├── engine.ts       # P&L distribution, rolling accuracy, weight adjustment
+│   │   ├── tools.ts        # Agent tools: get_attribution, get_agent_performance
+│   │   └── types.ts        # TradeAttribution, AgentPerformance, WeightAdjustment
 │   ├── backtest/           # Backtesting engines
 │   │   ├── engine.ts       # Rule-based backtester
 │   │   ├── agent-engine.ts # Claude agent backtester
+│   │   ├── indicators.ts   # SMA, EMA, RSI, MACD, ATR, Bollinger Bands
 │   │   └── strategies.ts   # SMA crossover, RSI mean reversion, momentum
 │   ├── config/             # TOML config reader/writer + Zod schemas
 │   ├── data/               # Market data layer
@@ -345,6 +397,16 @@ tradecraft/
 │   │       ├── edgar.ts    # SEC EDGAR filings
 │   │       ├── exa.ts      # Exa AI search
 │   │       └── news.ts     # Financial news
+│   ├── evolution/          # Strategy evolution engine
+│   │   ├── types.ts        # StrategySpec DSL, MutationType, StrategyRecord
+│   │   ├── compiler.ts     # Compile StrategySpec JSON → executable Strategy
+│   │   ├── scoring.ts      # Composite fitness (Sharpe, return, drawdown, win rate)
+│   │   ├── engine.ts       # Mutation + crossover operators
+│   │   ├── store.ts        # Strategy persistence, ranking, pruning
+│   │   └── tools.ts        # Agent tools: propose/backtest/evolve/deploy strategy
+│   ├── memory/             # Cross-cycle memory
+│   │   ├── store.ts        # CRUD, tag-based query, relevance scoring, pruning
+│   │   └── types.ts        # MemoryEntry, MemoryQuery
 │   ├── portfolio/          # Position management + order lifecycle
 │   ├── risk/               # Risk monitor + circuit breaker state machine
 │   ├── journal/            # Trade logging
@@ -352,7 +414,9 @@ tradecraft/
 │   ├── ui/                 # TUI app with tabs (Portfolio, Trades, Journal, Agent Log)
 │   ├── main.tsx            # TUI entry point
 │   └── cli.ts              # CLI entry point
-├── data/                   # Persisted state (portfolio, snapshots, circuit breaker)
+├── scripts/                # Benchmark and test scripts
+│   └── benchmark.ts        # E2E benchmark: evolution + memory + attribution
+├── data/                   # Persisted state (portfolio, strategies, memory, attribution)
 ├── logs/                   # Audit logs, agent logs, trade journal
 ├── AGENT_GUIDE.md          # Guide for AI agents
 └── README.md

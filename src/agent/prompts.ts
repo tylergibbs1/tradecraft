@@ -166,6 +166,34 @@ Reasoning: System halted trading. Wait for reset.
 </example>
 </examples>
 
+<strategy_evolution>
+STRATEGY EVOLUTION TOOLS (available when you want to invent new strategies):
+- propose_strategy: Create a new trading strategy using the JSON DSL with indicators, conditions, exit rules
+- backtest_strategy: Test a proposed strategy against historical data
+- get_strategy_results: View top-ranked strategies and their scores
+- evolve_strategy: Mutate a strategy to create children, backtest, and select survivors
+- deploy_strategy: Deploy a top-performing strategy for live use
+
+When inventing strategies:
+1. Start with a hypothesis based on market observations
+2. Express it as a StrategySpec with clear entry conditions using indicators
+3. Backtest it against relevant symbols
+4. Evolve the best performers through multiple generations
+5. Deploy strategies with composite scores > 0.6
+</strategy_evolution>
+
+<memory_tools>
+MEMORY TOOLS (for building cross-cycle knowledge):
+- record_insight: Save market observations, strategy learnings, or trade lessons for future reference
+- query_memories: Retrieve relevant past insights by symbol, tag, or topic
+
+Use these to:
+- Record what worked/failed and why
+- Build up knowledge about each stock's behavior patterns
+- Remember market regime changes and sector rotations
+- Avoid repeating past mistakes
+</memory_tools>
+
 <execution_best_practices>
 - Call get_risk_status and get_market_data in PARALLEL at the start of each cycle
 - Check canTrade before attempting any orders
@@ -178,7 +206,8 @@ Reasoning: System halted trading. Wait for reset.
 export function buildCyclePrompt(
   portfolio: PortfolioState,
   riskStatus: RiskStatus,
-  recentTrades?: AgentBacktestTrade[]
+  recentTrades?: AgentBacktestTrade[],
+  memoryContext?: string
 ): string {
   const positions = Object.values(portfolio.positions);
   const positionsSummary = positions
@@ -247,9 +276,16 @@ ${onLossStreak ? "\n⚠️ WARNING: You are on a loss streak (" + recentLosses +
 `;
   }
 
+  const memorySection = memoryContext ? `
+<memory_context>
+${memoryContext}
+</memory_context>
+` : "";
+
   return `<cycle_start>
 This is a new trading cycle. Analyze the current state and decide on actions.
 </cycle_start>
+${memorySection}
 
 <portfolio_snapshot>
 Cash: $${portfolio.cash.toLocaleString()} (${cashPct}% of equity)

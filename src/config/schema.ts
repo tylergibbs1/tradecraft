@@ -35,6 +35,35 @@ export const AgentParamsSchema = z.object({
 });
 export type AgentParams = z.infer<typeof AgentParamsSchema>;
 
+// Agent mode
+export const AgentModeSchema = z.enum(["single", "swarm"]);
+export type AgentMode = z.infer<typeof AgentModeSchema>;
+
+// Swarm parameters
+export const SwarmParamsSchema = z.object({
+  specialistModel: z.string().default("claude-sonnet-4-5-20250929"),
+  weights: z.object({
+    "fundamental-analyst": z.number().min(0).max(1).default(0.25),
+    "earnings-analyst": z.number().min(0).max(1).default(0.20),
+    "technical-analyst": z.number().min(0).max(1).default(0.15),
+    "sentiment-analyst": z.number().min(0).max(1).default(0.10),
+    "macro-analyst": z.number().min(0).max(1).default(0.15),
+    "catalyst-analyst": z.number().min(0).max(1).default(0.10),
+    "hypothesis-generator": z.number().min(0).max(1).default(0.05),
+  }).default({
+    "fundamental-analyst": 0.25,
+    "earnings-analyst": 0.20,
+    "technical-analyst": 0.15,
+    "sentiment-analyst": 0.10,
+    "macro-analyst": 0.15,
+    "catalyst-analyst": 0.10,
+    "hypothesis-generator": 0.05,
+  }),
+  parallelSpecialists: z.boolean().default(true),
+  minConsensusConfidence: z.number().min(0).max(1).default(0.5),
+});
+export type SwarmParams = z.infer<typeof SwarmParamsSchema>;
+
 // Capital configuration
 export const CapitalSchema = z.object({
   initialCapital: z.number().min(0).default(100000),
@@ -74,6 +103,21 @@ const defaultCapital: Capital = {
   paperTrading: true,
 };
 
+const defaultSwarmParams: SwarmParams = {
+  specialistModel: "claude-sonnet-4-5-20250929",
+  weights: {
+    "fundamental-analyst": 0.25,
+    "earnings-analyst": 0.20,
+    "technical-analyst": 0.15,
+    "sentiment-analyst": 0.10,
+    "macro-analyst": 0.15,
+    "catalyst-analyst": 0.10,
+    "hypothesis-generator": 0.05,
+  },
+  parallelSpecialists: true,
+  minConsensusConfidence: 0.5,
+};
+
 // Full configuration schema
 export const ConfigSchema = z.object({
   dataProvider: DataProviderSchema.default("yahoo"),
@@ -82,6 +126,8 @@ export const ConfigSchema = z.object({
   riskLimits: RiskLimitsSchema.default(defaultRiskLimits),
   tradingUniverse: TradingUniverseSchema.default(defaultTradingUniverse),
   agentParams: AgentParamsSchema.default(defaultAgentParams),
+  agentMode: AgentModeSchema.default("single"),
+  swarmParams: SwarmParamsSchema.default(defaultSwarmParams),
   capital: CapitalSchema.default(defaultCapital),
   createdAt: z.string().datetime().optional(),
   updatedAt: z.string().datetime().optional(),
@@ -94,5 +140,7 @@ export const defaultConfig: Config = {
   riskLimits: defaultRiskLimits,
   tradingUniverse: defaultTradingUniverse,
   agentParams: defaultAgentParams,
+  agentMode: "single",
+  swarmParams: defaultSwarmParams,
   capital: defaultCapital,
 };

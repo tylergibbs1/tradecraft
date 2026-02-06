@@ -140,6 +140,8 @@ export interface TradingMCPServerDeps {
   dataManager: DataManager;
   tradingUniverse: string[];
   polygonApiKey?: string;
+  evolutionTools?: Record<string, { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }>;
+  memoryTools?: Record<string, { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }>;
 }
 
 function createPortfolioSnapshot(
@@ -183,7 +185,7 @@ function sanitizeTradingUniverse(symbols: string[]): string[] {
 }
 
 export function createTradingTools(deps: TradingMCPServerDeps) {
-  const { portfolioManager, riskMonitor, dataManager, tradingUniverse, polygonApiKey } = deps;
+  const { portfolioManager, riskMonitor, dataManager, tradingUniverse, polygonApiKey, evolutionTools, memoryTools } = deps;
 
   // Sanitize trading universe to prevent prompt injection via symbol names
   const sanitizedUniverse = sanitizeTradingUniverse(tradingUniverse);
@@ -250,7 +252,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
           };
         }
 
-        // Create and submit order
+        // Paper trading: create and submit order locally
         const order = portfolioManager.createOrder(
           input.symbol.toUpperCase(),
           input.side,
@@ -961,6 +963,10 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
         }
       },
     },
+
+    // Merge optional evolution and memory tools
+    ...(evolutionTools || {}),
+    ...(memoryTools || {}),
 
     search_tickers: {
       description: "Search for stock tickers by company name, or filter by type/exchange. Useful for discovering new stocks to add to the trading universe. Requires Polygon API key.",

@@ -144,6 +144,69 @@ export function computeMACD(
   return { macdLine, signalLine, histogram };
 }
 
+export function computeATR(
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  period: number = 14
+): number[] {
+  const result: number[] = [];
+  if (highs.length < 2) return highs.map(() => NaN);
+
+  // True Range calculation
+  const trueRanges: number[] = [highs[0]! - lows[0]!]; // First TR is just high - low
+  for (let i = 1; i < highs.length; i++) {
+    const tr = Math.max(
+      highs[i]! - lows[i]!,
+      Math.abs(highs[i]! - closes[i - 1]!),
+      Math.abs(lows[i]! - closes[i - 1]!)
+    );
+    trueRanges.push(tr);
+  }
+
+  // ATR using smoothed average
+  for (let i = 0; i < trueRanges.length; i++) {
+    if (i < period - 1) {
+      result.push(NaN);
+    } else if (i === period - 1) {
+      let sum = 0;
+      for (let j = 0; j < period; j++) sum += trueRanges[j]!;
+      result.push(sum / period);
+    } else {
+      const prev = result[i - 1]!;
+      result.push((prev * (period - 1) + trueRanges[i]!) / period);
+    }
+  }
+  return result;
+}
+
+export function computeBollingerBands(
+  closes: number[],
+  period: number = 20,
+  stdDevMultiplier: number = 2
+): { upper: number[]; middle: number[]; lower: number[] } {
+  const middle = computeSMA(closes, period);
+  const upper: number[] = [];
+  const lower: number[] = [];
+
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) {
+      upper.push(NaN);
+      lower.push(NaN);
+    } else {
+      // Calculate standard deviation for the window
+      const window = closes.slice(i - period + 1, i + 1);
+      const mean = middle[i]!;
+      const variance = window.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period;
+      const stdDev = Math.sqrt(variance);
+      upper.push(mean + stdDevMultiplier * stdDev);
+      lower.push(mean - stdDevMultiplier * stdDev);
+    }
+  }
+
+  return { upper, middle, lower };
+}
+
 export function computeAllIndicators(bars: OHLCV[]): IndicatorResult {
   const closes = bars.map((b) => b.close);
   const dates = bars.map((b) => new Date(b.timestamp).toISOString().split("T")[0]!);

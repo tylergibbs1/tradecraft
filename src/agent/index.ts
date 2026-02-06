@@ -9,6 +9,8 @@ import { createCanUseTool } from "./permissions.js";
 import { AgentLogger, createHooks } from "./hooks.js";
 import { buildSystemPrompt, buildCyclePrompt } from "./prompts.js";
 import { AgentState, AgentMessage, AgentCycleResult, AgentConfig } from "./types.js";
+import { StrategyStore, EvolutionEngine, createEvolutionTools } from "../evolution/index.js";
+import { MemoryStore, createMemoryTools } from "../memory/index.js";
 
 export * from "./types.js";
 
@@ -110,6 +112,8 @@ export class TradingAgent {
   private tools: ReturnType<typeof createTradingTools>;
   private tradingUniverse: string[];
   private allowShorts: boolean;
+  private memoryStore: MemoryStore;
+  private strategyStore: StrategyStore;
 
   constructor(deps: AgentDependencies, callbacks: AgentCallbacks = {}) {
     this.deps = deps;
@@ -132,12 +136,29 @@ export class TradingAgent {
       },
     });
 
+    // Initialize evolution engine
+    this.strategyStore = new StrategyStore();
+    const evolutionEngine = new EvolutionEngine(
+      this.strategyStore,
+      deps.dataManager
+    );
+    const evolutionTools = createEvolutionTools({
+      engine: evolutionEngine,
+      store: this.strategyStore,
+    });
+
+    // Initialize memory store
+    this.memoryStore = new MemoryStore();
+    const memTools = createMemoryTools({ memoryStore: this.memoryStore });
+
     const toolDeps: TradingMCPServerDeps = {
       portfolioManager: deps.portfolioManager,
       riskMonitor: deps.riskMonitor,
       dataManager: deps.dataManager,
       tradingUniverse: this.tradingUniverse,
       polygonApiKey: deps.config.dataProviderApiKey,
+      evolutionTools: evolutionTools as TradingMCPServerDeps["evolutionTools"],
+      memoryTools: memTools as TradingMCPServerDeps["memoryTools"],
     };
 
     this.tools = createTradingTools(toolDeps);
@@ -291,9 +312,10 @@ export class TradingAgent {
 
       const riskStatus = this.deps.riskMonitor.getStatus(snapshot);
 
-      // Build prompts
+      // Build prompts with memory context
+      const memoryContext = this.memoryStore.buildMemoryContext(this.tradingUniverse);
       const systemPrompt = buildSystemPrompt(this.tradingUniverse, this.allowShorts, this.deps.config.riskLimits);
-      const cyclePrompt = buildCyclePrompt(updatedState, riskStatus);
+      const cyclePrompt = buildCyclePrompt(updatedState, riskStatus, undefined, memoryContext);
 
       // Convert tools to Anthropic format with proper JSON schema types
       const anthropicTools: Anthropic.Tool[] = Object.entries(this.tools).map(

@@ -27,3 +27,17 @@ export interface AgentConfig {
   cycleIntervalMs: number;
   systemPromptPath?: string;
 }
+
+/**
+ * Common interface for both single and swarm trading agents.
+ * Enables polymorphic agent creation in the TUI and CLI.
+ */
+export interface ITradingAgent {
+  getState(): AgentState;
+  start(): void;
+  pause(): void;
+  resume(): void;
+  stop(): void;
+  halt(): void;
+  runSingleCycle(): Promise<AgentCycleResult>;
+}

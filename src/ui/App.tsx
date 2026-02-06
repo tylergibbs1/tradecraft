@@ -7,6 +7,8 @@ import { Trades } from "./components/Trades.js";
 import { Journal } from "./components/Journal.js";
 import { AgentLog } from "./components/AgentLog.js";
 import { TradingAgent, AgentState, AgentMessage, AgentCycleResult } from "../agent/index.js";
+import { ITradingAgent } from "../agent/types.js";
+import { SwarmTradingAgent } from "../agent/swarm-adapter.js";
 import { PortfolioManager } from "../portfolio/manager.js";
 import { RiskMonitor } from "../risk/monitor.js";
 import { DataManager } from "../data/index.js";
@@ -37,26 +39,29 @@ export function App({ config }: AppProps) {
     return { portfolioManager, riskMonitor, dataManager };
   });
 
-  // Initialize agent
-  const [agent] = useState(() => {
-    return new TradingAgent(
-      {
-        config,
-        portfolioManager: managers.portfolioManager,
-        riskMonitor: managers.riskMonitor,
-        dataManager: managers.dataManager,
+  // Initialize agent (mode-aware: single or swarm)
+  const [agent] = useState<ITradingAgent>(() => {
+    const callbacks = {
+      onStateChange: (state: AgentState) => setAgentState(state),
+      onMessage: (msg: AgentMessage) => setMessages((prev) => [...prev.slice(-100), msg]),
+      onCycleComplete: (result: AgentCycleResult) => {
+        setCycleResults((prev) => [...prev, result]);
+        setPortfolioState(managers.portfolioManager.getState());
+        setEquityHistory(managers.portfolioManager.getEquityHistory());
       },
-      {
-        onStateChange: (state) => setAgentState(state),
-        onMessage: (msg) => setMessages((prev) => [...prev.slice(-100), msg]),
-        onCycleComplete: (result) => {
-          setCycleResults((prev) => [...prev, result]);
-          // Refresh portfolio state
-          setPortfolioState(managers.portfolioManager.getState());
-          setEquityHistory(managers.portfolioManager.getEquityHistory());
-        },
-      }
-    );
+    };
+
+    const agentDeps = {
+      config,
+      portfolioManager: managers.portfolioManager,
+      riskMonitor: managers.riskMonitor,
+      dataManager: managers.dataManager,
+    };
+
+    if (config.agentMode === "swarm") {
+      return new SwarmTradingAgent(agentDeps, callbacks);
+    }
+    return new TradingAgent(agentDeps, callbacks);
   });
 
   // Refresh portfolio periodically
@@ -131,6 +136,7 @@ export function App({ config }: AppProps) {
         equity={portfolioState.equity}
         dailyPnL={portfolioState.dailyPnL}
         activeTab={activeTab}
+        agentMode={config.agentMode}
       />
       <Box flexGrow={1} minHeight={15}>
         {renderTab()}

@@ -29,13 +29,31 @@ const testConfig: Config = {
   },
   tradingUniverse: {
     symbols: ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA"],
+    sectors: [],
+    excludeSymbols: [],
     allowShorts: false,
+    allowOptions: false,
   },
   agentParams: {
     model: "claude-sonnet-4-5-20250929",
     maxTurns: 10,
     maxBudgetUsd: 0.5,
     cycleIntervalMs: 60000,
+  },
+  agentMode: "single",
+  swarmParams: {
+    specialistModel: "claude-sonnet-4-5-20250929",
+    weights: {
+      "fundamental-analyst": 0.25,
+      "earnings-analyst": 0.20,
+      "technical-analyst": 0.15,
+      "sentiment-analyst": 0.10,
+      "macro-analyst": 0.15,
+      "catalyst-analyst": 0.10,
+      "hypothesis-generator": 0.05,
+    },
+    parallelSpecialists: true,
+    minConsensusConfidence: 0.5,
   },
   capital: {
     initialCapital: 100000,

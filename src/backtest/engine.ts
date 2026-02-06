@@ -205,10 +205,9 @@ export class BacktestEngine {
         const signal = strategy.generateSignals(symbol, historySoFar, position);
 
         if (signal.type === "buy" && !position) {
-          // Size position based on signal strength and available capital
+          // Size position: strength (0-1) maps directly to fraction of equity
           const equity = this.getEquity(currentPrices);
-          const maxPositionValue = equity * 0.1; // 10% max position
-          const targetValue = maxPositionValue * signal.strength;
+          const targetValue = equity * Math.max(0.01, Math.min(0.25, signal.strength));
           const quantity = Math.floor(targetValue / currentBar.close);
 
           if (quantity > 0) {
