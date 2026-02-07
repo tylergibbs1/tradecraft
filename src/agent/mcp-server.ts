@@ -157,6 +157,14 @@ export interface TradingMCPServerDeps {
     string,
     { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }
   >;
+  journalTools?: Record<
+    string,
+    { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }
+  >;
+  regimeTools?: Record<
+    string,
+    { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }
+  >;
 }
 
 function createPortfolioSnapshot(portfolioManager: PortfolioManager, quotes: Map<string, Quote>): PortfolioSnapshot {
@@ -195,8 +203,17 @@ function sanitizeTradingUniverse(symbols: string[]): string[] {
 }
 
 export function createTradingTools(deps: TradingMCPServerDeps) {
-  const { portfolioManager, riskMonitor, dataManager, tradingUniverse, polygonApiKey, evolutionTools, memoryTools } =
-    deps;
+  const {
+    portfolioManager,
+    riskMonitor,
+    dataManager,
+    tradingUniverse,
+    polygonApiKey,
+    evolutionTools,
+    memoryTools,
+    journalTools,
+    regimeTools,
+  } = deps;
 
   // Sanitize trading universe to prevent prompt injection via symbol names
   const sanitizedUniverse = sanitizeTradingUniverse(tradingUniverse);
@@ -997,9 +1014,11 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
       },
     },
 
-    // Merge optional evolution and memory tools
+    // Merge optional evolution, memory, journal, and regime tools
     ...(evolutionTools || {}),
     ...(memoryTools || {}),
+    ...(journalTools || {}),
+    ...(regimeTools || {}),
 
     search_tickers: {
       description:

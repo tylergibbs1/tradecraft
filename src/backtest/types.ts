@@ -54,6 +54,27 @@ export interface BacktestResult {
   tradingDays: number;
   trades: BacktestTrade[];
   equityCurve: BacktestSnapshot[];
+  benchmarkComparison?: BenchmarkComparison;
+}
+
+export interface BenchmarkResult {
+  name: string;
+  annualizedReturn: number;
+  totalReturnPercent: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  equityCurve?: { timestamp: number; equity: number }[];
+}
+
+export interface AlphaMetrics {
+  alpha: number;
+  trackingError: number;
+  informationRatio: number;
+}
+
+export interface BenchmarkComparison {
+  benchmarks: BenchmarkResult[];
+  alphaVsBenchmarks: Record<string, AlphaMetrics>;
 }
 
 export type SignalType = "buy" | "sell" | "hold";
