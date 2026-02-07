@@ -257,6 +257,15 @@ You can also set API keys via environment variables (`ANTHROPIC_API_KEY`, `POLYG
 | `query_memories` | Query accumulated market insights |
 | `get_attribution` | View trade-to-signal P&L attribution |
 | `get_agent_performance` | View per-agent accuracy and weight adjustments |
+| `record_enhanced_decision` | Record decision with bias analysis and counterfactual |
+| `query_decisions` | Query past decisions by symbol, bias, outcome |
+| `generate_bias_report` | Aggregated bias avoidance report vs human base rates |
+| `query_decision_patterns` | Find patterns: sold_into_rally, bought_the_dip, etc. |
+| `get_regime` | Classify current market regime for symbols |
+| `get_adaptation_metrics` | Track adaptation speed vs published manager data |
+| `evaluate_projects` | View capital allocation projects and constraints |
+| `submit_allocation` | Submit allocation, compare vs 4 heuristic baselines |
+| `compare_allocation_heuristics` | View heuristic baseline allocations |
 
 ### Key Design Principle
 
@@ -337,7 +346,7 @@ End-to-end benchmark with real Polygon.io data (AAPL/GOOGL/MSFT, Jan–Dec 2024,
 | RSI Oversold Bounce | +1.62% | 0.89 | 66.7% | 1.71% | 6 |
 | EMA 12/26 Momentum | +10.59% | 1.77 | 83.3% | 2.73% | 14 |
 
-**After 2 generations of evolution (5 mutations + 1 crossover per generation):**
+**After 5 generations of evolution (8 mutations + 1 crossover per generation):**
 
 | Champion | Return | Sharpe | Win Rate | Max Drawdown | Profit Factor |
 |----------|--------|--------|----------|--------------|---------------|
@@ -360,6 +369,68 @@ bun run scripts/benchmark.ts
 
 *Note: Backtests have inherent limitations. Past performance does not guarantee future results.*
 
+### Decision Journal & Bias Avoidance
+
+The agent records every trading decision with cognitive bias analysis, counterfactual reasoning, and market conditions. After positions close, outcomes are auto-annotated for retrospective analysis.
+
+**Bias avoidance reporting** compares agent performance against published human base rates from behavioral finance literature (Kahneman & Tversky 1979, Barber & Odean 2001, etc.). The `generate_bias_report` tool produces per-bias statistics including avoidance rate, P&L when avoided vs not, and comparison to human fall rates.
+
+**Pattern queries** find behavioral patterns like "sold into a rally", "bought the dip", "high confidence correct/wrong", and "bias saved money".
+
+### Multi-Model Tournament
+
+Compare multiple Claude models on identical backtest scenarios to answer: "Do LLMs as a class outperform active allocators?"
+
+```bash
+# Run tournament (requires ANTHROPIC_API_KEY, ~$5-20)
+bun run tournament
+
+# Custom duration
+bun run tournament --months=6 --frequency=1
+```
+
+Runs Opus 4.6, Sonnet 4.5, and Haiku 4.5 sequentially on the same symbols, dates, and risk limits. Outputs a ranked table, "LLMs as a Class" summary comparing average performance against HFRI and mutual fund benchmarks, and an ASCII equity curve overlay.
+
+### Corporate Capital Allocation
+
+Demonstrates that LLM allocation outperforms simple heuristics outside of trading. The agent allocates a $10M budget across 12 projects (Tech, Operations, Marketing, R&D, Infrastructure) that are 1.8x oversubscribed.
+
+```bash
+# Run allocation demo (requires ANTHROPIC_API_KEY, ~$0.10)
+bun run allocation-demo
+```
+
+The system compares the agent's allocation against four baselines:
+- **Equal weight** — budget / N per project
+- **Highest IRR first** — greedy fill by descending IRR
+- **Lowest risk first** — greedy fill by ascending risk
+- **Risk parity** — inversely proportional to risk score
+
+### Regime Detection & Adaptation Speed
+
+The agent classifies market regimes (bull/bear trend, high/low volatility, mean reverting, trending) and tracks how quickly it adapts to regime changes.
+
+Adaptation speed is compared against published academic data:
+- Active Mutual Funds: 60-90 cycles (Busse, Goyal & Wahal 2010)
+- Hedge Funds: 20-40 cycles (Ben-David, Franzoni & Moussawi 2012)
+- CTAs/Trend Followers: 5-15 cycles (Hurst, Ooi & Pedersen 2017)
+
+*Note: Published adaptation speed comparisons use approximate averages from academic literature. Exact numbers vary by study methodology and time period.*
+
+## Limitations and Honest Assessment
+
+This project is a research prototype, not a production trading system. Key limitations:
+
+- **Single year of backtesting (2024 bull market).** Results reflect a favorable market environment with survivorship bias in the stock universe (AAPL, GOOGL, MSFT, AMZN, NVDA are all large-cap winners). Performance in bear markets, sideways markets, or with small-cap stocks is untested.
+- **No black swan / flash crash testing.** The backtest engine uses daily bars with fixed slippage. It does not model liquidity crises, gap downs, halted trading, or extreme volatility events where real losses would be far worse.
+- **Equity-only, US large-cap.** No bonds, commodities, crypto, or international markets. The thesis ("LLMs beat active allocators") is only tested against a narrow slice of the investable universe.
+- **Prompt-based anti-churning, not code-enforced.** The 5-day hold period and 2-signal requirement are instructions in the system prompt. The agent can (and sometimes does) override them. A production system would enforce these as hard constraints.
+- **Limited evolution search depth.** Even with 5 generations of 8 mutations, the search space is tiny compared to the universe of possible strategies. The evolution engine explores local neighborhoods of the initial strategies, not the full parameter space.
+- **No live trading track record.** All results are from backtests with a simplified execution model (instant fills, fixed slippage, no market impact). Live trading introduces latency, partial fills, slippage variation, and data feed issues that can significantly degrade performance.
+- **Backtest != live performance.** The backtest engine does not model realistic order book dynamics, bid-ask spreads for illiquid periods, or the market impact of the agent's own trades.
+- **Adaptation speed comparisons are approximate.** Published manager repositioning speeds (Busse et al. 2010, Ben-David et al. 2012, Hurst et al. 2017) are averages across different methodologies, time periods, and market conditions. Direct comparison with agent cycle counts is directionally useful but not exact.
+- **Capital allocation demo uses estimated IRRs.** The corporate allocation demo projects have fixed estimated IRRs. Real capital allocation involves uncertain, dynamic IRR estimates and complex interdependencies between projects.
+
 ## Project Structure
 
 ```
@@ -381,9 +452,17 @@ tradecraft/
 │   │   ├── engine.ts       # P&L distribution, rolling accuracy, weight adjustment
 │   │   ├── tools.ts        # Agent tools: get_attribution, get_agent_performance
 │   │   └── types.ts        # TradeAttribution, AgentPerformance, WeightAdjustment
+│   ├── allocation/          # Corporate capital allocation
+│   │   ├── types.ts        # Project, AllocationDecision, constraints
+│   │   ├── heuristics.ts   # 4 baseline strategies (equal, IRR, risk, parity)
+│   │   ├── engine.ts       # Validation + heuristic comparison
+│   │   ├── tools.ts        # Agent tools: evaluate, allocate, compare
+│   │   └── index.ts        # Module exports
 │   ├── backtest/           # Backtesting engines
 │   │   ├── engine.ts       # Rule-based backtester
 │   │   ├── agent-engine.ts # Claude agent backtester
+│   │   ├── benchmarks.ts   # SPY, AGG, QQQ, ARKK + HFRI benchmarks
+│   │   ├── tournament-types.ts # Multi-model tournament types
 │   │   ├── indicators.ts   # SMA, EMA, RSI, MACD, ATR, Bollinger Bands
 │   │   └── strategies.ts   # SMA crossover, RSI mean reversion, momentum
 │   ├── config/             # TOML config reader/writer + Zod schemas
@@ -409,13 +488,22 @@ tradecraft/
 │   │   └── types.ts        # MemoryEntry, MemoryQuery
 │   ├── portfolio/          # Position management + order lifecycle
 │   ├── risk/               # Risk monitor + circuit breaker state machine
-│   ├── journal/            # Trade logging
+│   ├── journal/            # Trade logging + decision journal
+│   │   ├── index.ts        # JSONL read/write, annotation
+│   │   ├── tools.ts        # Bias report, pattern queries, enhanced decisions
+│   │   └── types.ts        # BiasReport, DecisionPatternMatch, etc.
 │   ├── setup/              # Interactive setup wizard (Ink/React)
 │   ├── ui/                 # TUI app with tabs (Portfolio, Trades, Journal, Agent Log)
 │   ├── main.tsx            # TUI entry point
 │   └── cli.ts              # CLI entry point
+│   ├── regime/             # Market regime detection
+│   │   ├── detector.ts     # RegimeDetector with adaptation speed comparison
+│   │   ├── tools.ts        # Agent tools: get_regime, get_adaptation_metrics
+│   │   └── types.ts        # MarketRegime, AdaptationComparison
 ├── scripts/                # Benchmark and test scripts
-│   └── benchmark.ts        # E2E benchmark: evolution + memory + attribution
+│   ├── benchmark.ts        # E2E benchmark: evolution + fitness curves + benchmarks
+│   ├── tournament.ts       # Multi-model tournament (Opus/Sonnet/Haiku)
+│   └── allocation-demo.ts  # Corporate capital allocation demo
 ├── data/                   # Persisted state (portfolio, strategies, memory, attribution)
 ├── logs/                   # Audit logs, agent logs, trade journal
 ├── AGENT_GUIDE.md          # Guide for AI agents

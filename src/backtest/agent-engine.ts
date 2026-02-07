@@ -554,7 +554,7 @@ export class AgentBacktestEngine {
 
       const response = await this.client.messages.create({
         model: this.config.model,
-        max_tokens: 2048,
+        max_tokens: 16000,
         system: systemPrompt,
         tools,
         messages,
@@ -606,7 +606,7 @@ export class AgentBacktestEngine {
       tokens,
       cost,
       trades: cycleTrades,
-      reasoning: reasoning.slice(0, 500),
+      reasoning,
       portfolioValue: portfolio.getEquity(currentPrices),
     };
   }

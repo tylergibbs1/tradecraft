@@ -44,7 +44,7 @@ export function createRng(seed?: number): () => number {
 }
 
 const DEFAULT_EVOLUTION_CONFIG: EvolutionConfig = {
-  populationSize: 5,
+  populationSize: 8,
   survivorCount: 3,
   backtestConfig: {
     startDate: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000), // 1 year ago

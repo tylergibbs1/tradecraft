@@ -16,7 +16,10 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+// @ts-expect-error -- asciichart has no type declarations
+import asciichart from "asciichart";
 import { AttributionEngine } from "../src/attribution/engine.js";
+import { buildBenchmarkComparison } from "../src/backtest/benchmarks.js";
 import { BacktestEngine } from "../src/backtest/engine.js";
 import type { BacktestConfig, BacktestResult } from "../src/backtest/types.js";
 import { DataManager } from "../src/data/index.js";
@@ -26,6 +29,14 @@ import { scoreBacktestResult, summarizeBacktest } from "../src/evolution/scoring
 import { StrategyStore } from "../src/evolution/store.js";
 import type { StrategySpec } from "../src/evolution/types.js";
 import { MemoryStore } from "../src/memory/store.js";
+
+interface FitnessGeneration {
+  generation: number;
+  bestScore: number;
+  avgScore: number;
+  worstScore: number;
+  numStrategies: number;
+}
 
 // --clean flag: delete data files so benchmark starts from scratch
 if (process.argv.includes("--clean")) {
@@ -197,17 +208,28 @@ async function main() {
     `  Best: ${bestParent.spec.name} (composite: ${scoreBacktestResult(bestParent.result).composite.toFixed(4)})\n`,
   );
 
-  // 4. Evolve: 2 generations of 5 mutations each
-  console.log("─── Evolution (2 Generations × 5 Mutations) ───────────────\n");
+  // Track fitness per generation
+  const fitnessHistory: FitnessGeneration[] = [];
+  const gen0Scores = results.map((r) => scoreBacktestResult(r.result).composite);
+  fitnessHistory.push({
+    generation: 0,
+    bestScore: Math.max(...gen0Scores),
+    avgScore: gen0Scores.reduce((a, b) => a + b, 0) / gen0Scores.length,
+    worstScore: Math.min(...gen0Scores),
+    numStrategies: gen0Scores.length,
+  });
+
+  // 4. Evolve: 5 generations of 8 mutations each
+  console.log("─── Evolution (5 Generations × 8 Mutations) ───────────────\n");
 
   let currentBest = bestParent;
-  for (let gen = 1; gen <= 2; gen++) {
+  for (let gen = 1; gen <= 5; gen++) {
     console.log(`  Generation ${gen}:`);
     const children: { spec: StrategySpec; result: BacktestResult; mutation: string }[] = [];
 
-    // 4 point mutations + 1 combination
+    // 7 point mutations + 1 combination
     const mutTypes = ["adjust_period", "adjust_threshold", "swap_indicator", "adjust_exit", "adjust_sizing"] as const;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 8; i++) {
       const { spec: childSpec, mutation } = mutateStrategy(currentBest.spec, mutTypes[i]);
       childSpec.name = `${currentBest.spec.name} G${gen}M${i + 1}`;
 
@@ -240,6 +262,16 @@ async function main() {
     const genBestScore = scoreBacktestResult(genBest.result).composite;
     const parentScore = scoreBacktestResult(currentBest.result).composite;
 
+    // Track fitness for this generation
+    const genScores = children.map((c) => scoreBacktestResult(c.result).composite);
+    fitnessHistory.push({
+      generation: gen,
+      bestScore: Math.max(...genScores),
+      avgScore: genScores.reduce((a, b) => a + b, 0) / genScores.length,
+      worstScore: Math.min(...genScores),
+      numStrategies: genScores.length,
+    });
+
     if (genBestScore > parentScore) {
       console.log(`    Winner: ${genBest.spec.name} (${genBestScore.toFixed(4)} > parent ${parentScore.toFixed(4)})`);
       currentBest = { spec: genBest.spec, result: genBest.result };
@@ -249,11 +281,119 @@ async function main() {
     console.log();
   }
 
-  // 5. Final champion
+  // 5. Fitness curve
+  console.log("─── Fitness Curve ─────────────────────────────────────────\n");
+  if (fitnessHistory.length > 1) {
+    const bestSeries = fitnessHistory.map((g) => g.bestScore);
+    const avgSeries = fitnessHistory.map((g) => g.avgScore);
+
+    console.log("  Best (top) and Average (bottom) composite scores per generation:\n");
+    try {
+      const chart = asciichart.plot([bestSeries, avgSeries], {
+        height: 10,
+        padding: "    ",
+        colors: [asciichart.green, asciichart.blue],
+      });
+      console.log(chart);
+    } catch {
+      // Fallback if asciichart fails
+      for (const g of fitnessHistory) {
+        console.log(
+          `  Gen ${g.generation}: best=${g.bestScore.toFixed(4)}, avg=${g.avgScore.toFixed(4)}, worst=${g.worstScore.toFixed(4)} (${g.numStrategies} strategies)`,
+        );
+      }
+    }
+
+    console.log();
+    const gen0Best = fitnessHistory[0]!.bestScore;
+    const lastBest = fitnessHistory[fitnessHistory.length - 1]!.bestScore;
+    const improvement = gen0Best > 0 ? ((lastBest - gen0Best) / gen0Best) * 100 : 0;
+
+    if (improvement > 1) {
+      console.log(`  Fitness improved ${improvement.toFixed(1)}% from gen 0 to gen ${fitnessHistory.length - 1}.`);
+    } else {
+      // Find where plateau occurred
+      let plateauGen = 0;
+      for (let i = 1; i < fitnessHistory.length; i++) {
+        if (fitnessHistory[i]!.bestScore > fitnessHistory[i - 1]!.bestScore) {
+          plateauGen = i;
+        }
+      }
+      console.log(`  Fitness plateaued at gen ${plateauGen} (improvement: ${improvement.toFixed(1)}%).`);
+    }
+    console.log();
+
+    // Write fitness data to JSON
+    const dataDir = path.join(process.cwd(), "data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    fs.writeFileSync(
+      path.join(dataDir, "fitness_curve.json"),
+      JSON.stringify({ fitnessHistory, generatedAt: new Date().toISOString() }, null, 2),
+    );
+    console.log("  Written to data/fitness_curve.json\n");
+  }
+
+  // 5b. Final champion
   console.log("─── Champion Strategy ─────────────────────────────────────\n");
   printResult(currentBest.spec.name, currentBest.result);
 
-  // 6. Memory — record real observations from real backtest data
+  // 6. Benchmark comparison
+  console.log("─── Benchmark Comparison ──────────────────────────────────\n");
+  try {
+    const comparison = await buildBenchmarkComparison(dm, currentBest.result.equityCurve, CAPITAL, START, END);
+
+    // Strategy daily returns for alpha calc
+    const stratReturns: number[] = [];
+    for (let i = 1; i < currentBest.result.equityCurve.length; i++) {
+      const prev = currentBest.result.equityCurve[i - 1]!.equity;
+      const curr = currentBest.result.equityCurve[i]!.equity;
+      stratReturns.push(prev > 0 ? (curr - prev) / prev : 0);
+    }
+
+    console.log(
+      `  ${"Benchmark".padEnd(38)} ${"Return".padStart(10)} ${"Sharpe".padStart(8)} ${"Max DD".padStart(8)} ${"Alpha".padStart(10)} ${"Info Ratio".padStart(12)} ${"Beat?".padStart(7)}`,
+    );
+    console.log(`  ${"─".repeat(95)}`);
+
+    // Champion strategy row
+    const champReturn = (currentBest.result.totalReturnPercent * 100).toFixed(2);
+    const champSharpe = currentBest.result.sharpeRatio.toFixed(2);
+    const champDD = (currentBest.result.maxDrawdown * 100).toFixed(2);
+    console.log(
+      `  ${"★ Champion Strategy".padEnd(38)} ${(`${champReturn}%`).padStart(10)} ${champSharpe.padStart(8)} ${(`${champDD}%`).padStart(8)} ${"—".padStart(10)} ${"—".padStart(12)} ${"—".padStart(7)}`,
+    );
+
+    let beatCount = 0;
+    const totalBenchmarks = comparison.benchmarks.length;
+
+    for (const bm of comparison.benchmarks) {
+      const alpha = comparison.alphaVsBenchmarks[bm.name];
+      const bmReturn = (bm.totalReturnPercent * 100).toFixed(2);
+      const bmSharpe = bm.sharpeRatio.toFixed(2);
+      const bmDD = (bm.maxDrawdown * 100).toFixed(2);
+      const alphaStr = alpha ? `${(alpha.alpha * 100).toFixed(2)}%` : "—";
+      const irStr = alpha ? alpha.informationRatio.toFixed(2) : "—";
+      const beat = currentBest.result.totalReturnPercent > bm.totalReturnPercent;
+      if (beat) beatCount++;
+      const beatStr = beat ? "✓" : "✗";
+      console.log(
+        `  ${bm.name.padEnd(38)} ${(`${bmReturn}%`).padStart(10)} ${bmSharpe.padStart(8)} ${(`${bmDD}%`).padStart(8)} ${alphaStr.padStart(10)} ${irStr.padStart(12)} ${beatStr.padStart(7)}`,
+      );
+    }
+    console.log();
+    console.log(`  Strategy beat ${beatCount} of ${totalBenchmarks} benchmarks.`);
+    console.log();
+    console.log("  Note: Strategy incurs commission ($1/trade) + slippage (0.05%). ETF benchmarks");
+    console.log("  assume frictionless buy-and-hold with no transaction costs. Static benchmarks");
+    console.log("  (HFRI, mutual fund avg) use long-run annualized averages, not period-matched returns.");
+    console.log();
+  } catch (error) {
+    console.log(`  Benchmark comparison skipped: ${error}\n`);
+  }
+
+  // 7. Memory — record real observations from real backtest data
   console.log("─── Memory (real observations from backtest) ──────────────\n");
   const memoryStore = new MemoryStore();
 

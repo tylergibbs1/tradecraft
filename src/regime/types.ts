@@ -39,3 +39,23 @@ export interface RegimeHistory {
   changes: RegimeChange[];
   lastUpdated: string;
 }
+
+export interface PublishedAdaptationSpeed {
+  managerType: string;
+  minCycles: number;
+  maxCycles: number;
+  source: string;
+}
+
+export interface AdaptationComparison {
+  agentAvgCycles: number;
+  comparisons: {
+    managerType: string;
+    publishedMinCycles: number;
+    publishedMaxCycles: number;
+    speedupVsMin: number;
+    speedupVsMax: number;
+    source: string;
+  }[];
+  summary: string;
+}

@@ -165,6 +165,10 @@ export interface TradingMCPServerDeps {
     string,
     { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }
   >;
+  allocationTools?: Record<
+    string,
+    { description: string; inputSchema: unknown; handler: (input: never) => Promise<unknown> }
+  >;
 }
 
 function createPortfolioSnapshot(portfolioManager: PortfolioManager, quotes: Map<string, Quote>): PortfolioSnapshot {
@@ -213,6 +217,7 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
     memoryTools,
     journalTools,
     regimeTools,
+    allocationTools,
   } = deps;
 
   // Sanitize trading universe to prevent prompt injection via symbol names
@@ -1014,11 +1019,12 @@ export function createTradingTools(deps: TradingMCPServerDeps) {
       },
     },
 
-    // Merge optional evolution, memory, journal, and regime tools
+    // Merge optional evolution, memory, journal, regime, and allocation tools
     ...(evolutionTools || {}),
     ...(memoryTools || {}),
     ...(journalTools || {}),
     ...(regimeTools || {}),
+    ...(allocationTools || {}),
 
     search_tickers: {
       description:

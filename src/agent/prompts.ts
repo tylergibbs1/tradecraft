@@ -190,6 +190,44 @@ Use these to:
 - Avoid repeating past mistakes
 </memory_tools>
 
+<decision_journal>
+DECISION JOURNAL TOOLS (for bias tracking and decision quality):
+- record_enhanced_decision: Log every significant trading decision with cognitive bias analysis
+- query_decisions: Review past decisions and their outcomes
+
+COGNITIVE BIAS TAXONOMY — actively identify and avoid these:
+- loss_aversion: Holding losers too long, selling winners too early
+- anchoring: Fixating on entry price or past highs
+- recency_bias: Overweighting recent events vs long-term trends
+- herding: Following crowd consensus without independent analysis
+- overconfidence: Oversizing positions or ignoring contrary evidence
+- disposition_effect: Realizing gains too quickly, deferring losses
+- confirmation_bias: Seeking only supporting evidence for your thesis
+- sunk_cost_fallacy: Adding to losers because of prior investment
+- gambler_fallacy: Expecting reversals after a streak
+- availability_bias: Overweighting vivid/recent news
+- status_quo_bias: Holding positions out of inertia, not conviction
+- framing_effect: Making different choices based on how data is presented
+
+When to use record_enhanced_decision:
+1. Before every trade execution — document your reasoning and biases avoided
+2. When choosing NOT to trade — explain why holding is the right call
+3. Include a counterfactual: "If the opposite happens, I would..."
+4. Decisions are auto-annotated with outcomes when positions close
+</decision_journal>
+
+<regime_tools>
+REGIME DETECTION TOOLS (for market environment awareness):
+- get_regime: Classify current market regime for symbols (bull_trend, bear_trend, high_volatility, low_volatility, mean_reverting, trending)
+- get_adaptation_metrics: View how quickly you've adapted to past regime changes
+
+Use these to:
+- Detect shifts from bull to bear markets and adjust positioning
+- Identify high-volatility environments where smaller positions are appropriate
+- Recognize mean-reverting markets where RSI signals are more reliable
+- Track your adaptation speed — faster adaptation = better risk management
+</regime_tools>
+
 <execution_best_practices>
 - Call get_risk_status and get_market_data in PARALLEL at the start of each cycle
 - Check canTrade before attempting any orders
@@ -204,6 +242,7 @@ export function buildCyclePrompt(
   riskStatus: RiskStatus,
   recentTrades?: AgentBacktestTrade[],
   memoryContext?: string,
+  regimeContext?: string,
 ): string {
   const positions = Object.values(portfolio.positions);
   const positionsSummary = positions
@@ -271,11 +310,18 @@ ${memoryContext}
 `
     : "";
 
+  const regimeSection = regimeContext
+    ? `
+<regime_context>
+${regimeContext}
+</regime_context>
+`
+    : "";
+
   return `<cycle_start>
 This is a new trading cycle. Analyze the current state and decide on actions.
 </cycle_start>
-${memorySection}
-
+${memorySection}${regimeSection}
 <portfolio_snapshot>
 Cash: $${portfolio.cash.toLocaleString()} (${cashPct}% of equity)
 Total Equity: $${portfolio.equity.toLocaleString()}

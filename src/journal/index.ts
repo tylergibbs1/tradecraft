@@ -1,14 +1,15 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Trade } from "../portfolio/types.js";
+import type { DecisionOutcome, EnhancedAnalysisEntry } from "./types.js";
 
 const LOGS_DIR = path.join(process.cwd(), "logs");
 const JOURNAL_FILE = path.join(LOGS_DIR, "trades.jsonl");
 
 export interface JournalEntry {
   timestamp: string;
-  type: "trade" | "note" | "analysis";
-  data: Trade | NoteEntry | AnalysisEntry;
+  type: "trade" | "note" | "analysis" | "enhanced_analysis";
+  data: Trade | NoteEntry | AnalysisEntry | EnhancedAnalysisEntry;
 }
 
 export interface NoteEntry {
@@ -82,14 +83,65 @@ export function recordAnalysis(analysis: AnalysisEntry): void {
 }
 
 /**
+ * Record an enhanced analysis entry with bias tracking and market conditions
+ */
+export function recordEnhancedAnalysis(analysis: EnhancedAnalysisEntry, filePath?: string): void {
+  const dir = filePath ? path.dirname(filePath) : LOGS_DIR;
+  const file = filePath ?? JOURNAL_FILE;
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  const entry: JournalEntry = {
+    timestamp: new Date().toISOString(),
+    type: "enhanced_analysis",
+    data: analysis,
+  };
+
+  fs.appendFileSync(file, `${JSON.stringify(entry)}\n`);
+}
+
+/**
+ * Find a decision by its decisionId across journal entries
+ */
+export function findDecision(decisionId: string, filePath?: string): JournalEntry | null {
+  const entries = readJournal(filePath);
+  return (
+    entries.find(
+      (e) => e.type === "enhanced_analysis" && (e.data as EnhancedAnalysisEntry).decisionId === decisionId,
+    ) ?? null
+  );
+}
+
+/**
+ * Annotate a decision with its actual outcome.
+ * Appends a NEW entry (preserving append-only JSONL contract).
+ * Returns true if the decision was found and annotated.
+ */
+export function annotateDecisionOutcome(decisionId: string, outcome: DecisionOutcome, filePath?: string): boolean {
+  const original = findDecision(decisionId, filePath);
+  if (!original) return false;
+
+  const originalData = original.data as EnhancedAnalysisEntry;
+  const annotatedData: EnhancedAnalysisEntry = {
+    ...originalData,
+    outcome,
+  };
+
+  recordEnhancedAnalysis(annotatedData, filePath);
+  return true;
+}
+
+/**
  * Read all journal entries
  */
-export function readJournal(): JournalEntry[] {
-  if (!fs.existsSync(JOURNAL_FILE)) {
+export function readJournal(filePath?: string): JournalEntry[] {
+  const file = filePath ?? JOURNAL_FILE;
+  if (!fs.existsSync(file)) {
     return [];
   }
 
-  const content = fs.readFileSync(JOURNAL_FILE, "utf-8");
+  const content = fs.readFileSync(file, "utf-8");
   const lines = content.trim().split("\n").filter(Boolean);
 
   return lines.map((line) => JSON.parse(line) as JournalEntry);
@@ -117,6 +169,9 @@ export function readJournalForSymbol(symbol: string): JournalEntry[] {
     }
     if (e.type === "analysis") {
       return (e.data as AnalysisEntry).symbol === symbol;
+    }
+    if (e.type === "enhanced_analysis") {
+      return (e.data as EnhancedAnalysisEntry).symbol === symbol;
     }
     return false;
   });
