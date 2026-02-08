@@ -237,6 +237,51 @@ Use these to:
 </execution_best_practices>`;
 }
 
+/**
+ * Extract the dominant (most common) regime from a regime context string.
+ * Returns null if no regime data is present.
+ */
+export function parseRegimeFromContext(regimeContext?: string): string | null {
+  if (!regimeContext) return null;
+  const matches = regimeContext.match(/\w+:\s+(\w+)\s+\(conf:/g);
+  if (!matches || matches.length === 0) return null;
+
+  const regimes: Record<string, number> = {};
+  for (const m of matches) {
+    const regime = m.replace(/^\w+:\s+/, "").replace(/\s+\(conf:$/, "");
+    regimes[regime] = (regimes[regime] ?? 0) + 1;
+  }
+
+  let dominant: string | null = null;
+  let maxCount = 0;
+  for (const [regime, count] of Object.entries(regimes)) {
+    if (count > maxCount) {
+      maxCount = count;
+      dominant = regime;
+    }
+  }
+  return dominant;
+}
+
+function buildLossStreakWarning(
+  recentClosing: AgentBacktestTrade[],
+  recentLosses: number,
+  regimeContext?: string,
+): string {
+  const dominantRegime = parseRegimeFromContext(regimeContext);
+  const defensiveSells = recentClosing.filter((t) => t.pnl !== undefined && t.pnl <= 0 && t.side === "sell");
+
+  if ((dominantRegime === "bear_trend" || dominantRegime === "high_volatility") && defensiveSells.length >= 2) {
+    return `\n⚠️ LOSS STREAK (${recentLosses} of last ${recentClosing.length} trades lost) — but most losses are defensive sells during a ${dominantRegime.replace("_", " ")} market. This is expected risk management. Continue monitoring position sizes but don't over-correct by avoiding all trades.`;
+  }
+
+  if (dominantRegime === "bull_trend" || dominantRegime === "trending") {
+    return `\n🚨 LOSS STREAK DURING BULL MARKET (${recentLosses} of last ${recentClosing.length} trades lost). Losses during favorable conditions suggest poor stock selection or bad timing. STRONGLY REDUCE activity, demand 2+ confirming signals for any trade, and prefer holding cash until you identify why trades are losing in a rising market.`;
+  }
+
+  return `\n⚠️ WARNING: You are on a loss streak (${recentLosses} of last ${recentClosing.length} trades were losses). REDUCE trading activity. Only trade with very high conviction and 2+ confirming signals. Holding cash is strongly preferred.`;
+}
+
 export function buildCyclePrompt(
   portfolio: PortfolioState,
   riskStatus: RiskStatus,
@@ -297,7 +342,7 @@ Last ${last15.length} trades (of ${recentTrades.length} total):
 ${tradeLines}
 
 Summary: ${wins} wins, ${losses} losses | Net P&L on closed trades: ${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}
-${onLossStreak ? `\n⚠️ WARNING: You are on a loss streak (${recentLosses} of last ${recentClosing.length} trades were losses). REDUCE trading activity. Only trade with very high conviction and 2+ confirming signals. Holding cash is strongly preferred.` : ""}
+${onLossStreak ? buildLossStreakWarning(recentClosing, recentLosses, regimeContext) : ""}
 </recent_trades>
 `;
   }

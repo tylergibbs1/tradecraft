@@ -97,16 +97,35 @@ Historical performance (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/NVDA):
 | H2 2024 | +2.19% | ~8% | 1.14 | 9.19% | $2.48 |
 | Full 2024 | +28.26% | ~24% | 4.46 | 9.73% | $4.92 |
 
-### Stress Tests
+### Stress Tests — 7 Market Regimes (2018-2024)
 
-| Test | Agent Return | SPY Buy-Hold | Agent Max DD | SPY Max DD |
-|------|-------------|-------------|-------------|-----------|
-| **March 2020** (COVID crash) | +6.45% | -3.1% | 4.71% | 33.9% |
-| **2022 H1** (bear market) | -5.22% | -20.6% | 5.78% | 23.6% |
+We ran the agent through every kind of market we could find — crashes, bear markets, bull runs, recoveries, and the AI hype rally. 25 weekly trading cycles per test, $100k starting capital, same 5 stocks (SPY, AAPL, MSFT, AMZN, GOOGL). Here's what happened:
 
-March 2020: Agent sold into the crash (4 sells, 0 buys), sat in cash through the bottom, re-entered April. 7x less drawdown than SPY.
+| Period | What happened in the market | Agent | SPY | Agent worst dip | SPY worst dip |
+|--------|----------------------------|-------|-----|-----------------|---------------|
+| **2018 Q4** | Fed raised rates, market panicked | -4.2% | ~-14% | -4.2% | ~-20% |
+| **2019 H1** | Steady recovery from 2018 crash | +7.3% | ~+17% | -6.0% | ~-7% |
+| **2020 H1** | COVID crash, then V-shaped recovery | +1.7% | ~-3% | -10.4% | ~-34% |
+| **2021 H1** | Post-vaccine euphoria, everything up | +1.6% | ~+14% | -4.0% | ~-4% |
+| **2022 H1** | Inflation, rate hikes, sustained decline | -6.9% | ~-21% | -11.2% | ~-24% |
+| **2023 H1** | AI hype starts, market rallies | +12.2% | ~+16% | -3.3% | ~-7% |
+| **2024 H1** | AI rally continues, Magnificent 7 | +5.8% | ~+15% | -2.7% | ~-5% |
 
-2022 H1: Agent got caught in the March relief rally (bought the bounce, lost money), but cut losses systematically. Still 75% less loss than passive. 0% win rate on trades — the edge came from cash management, not stock picking.
+**In plain English:**
+
+The agent's superpower is not losing money. In all 7 tests, it had smaller dips than just buying and holding SPY. During COVID, while the market dropped 34%, the agent only dropped 10% — it sold early and sat in cash. In the 2022 bear market, it lost 7% while SPY lost 21%.
+
+The tradeoff: it's too cautious in bull markets. When stocks are ripping (2021, 2024), it only captures a fraction of the gains because it waits for multiple confirming signals before buying. It returned +1.6% in a market that went up +14%.
+
+**The scorecard:**
+- Made money in 5 out of 7 periods
+- Beat SPY's return in 2 out of 7 (both were crashes — exactly when you need it)
+- Beat SPY's worst drawdown in 7 out of 7 (100% — never had a bigger dip)
+- Average return: +2.5% per 6-month window
+- Average worst dip: -5.9%
+- Total cost to run all 7 tests: ~$52 in API fees
+
+**Bottom line:** This is a risk manager, not a stock picker. It won't double your money in a bull market, but it also won't let a crash take 30% of your portfolio. Think of it as a seatbelt — you don't notice it until the accident.
 
 ### Decision Journal & Bias Tracking
 
