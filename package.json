@@ -18,6 +18,8 @@
     "test:attribution": "bun test tests/attribution",
     "benchmark": "bun run scripts/benchmark.ts",
     "benchmark:clean": "bun run scripts/benchmark.ts --clean",
+    "tournament": "bun run scripts/tournament.ts",
+    "allocation-demo": "bun run scripts/allocation-demo.ts",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
     "format": "bunx biome check --write .",

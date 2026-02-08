@@ -2,7 +2,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import { buildCyclePrompt, buildSystemPrompt } from "../agent/prompts.js";
 import type { RiskLimits } from "../config/schema.js";
 import type { DataManager, OHLCV } from "../data/index.js";
+import { annotateDecisionOutcome, readJournal } from "../journal/index.js";
+import { createJournalTools } from "../journal/tools.js";
+import type { EnhancedAnalysisEntry } from "../journal/types.js";
 import type { PortfolioState, Position } from "../portfolio/types.js";
+import { RegimeDetector } from "../regime/detector.js";
 import { type PortfolioSnapshot, RiskMonitor } from "../risk/monitor.js";
 import { getIndicatorSummary } from "./indicators.js";
 
@@ -258,11 +262,17 @@ export class AgentBacktestEngine {
   private config: AgentBacktestConfig;
   private historicalData: Map<string, OHLCV[]> = new Map();
   private pricesByDate: Map<string, Map<string, OHLCV>> = new Map();
+  private regimeDetector: RegimeDetector;
+  private journalTools: ReturnType<typeof createJournalTools>;
+  private journalFilePath: string;
 
   constructor(apiKey: string, dataManager: DataManager, config: AgentBacktestConfig) {
     this.client = new Anthropic({ apiKey });
     this.dataManager = dataManager;
     this.config = config;
+    this.regimeDetector = new RegimeDetector(`/tmp/tradecraft-backtest-regime-${Date.now()}.json`);
+    this.journalFilePath = `/tmp/tradecraft-backtest-journal-${Date.now()}.jsonl`;
+    this.journalTools = createJournalTools({ filePath: this.journalFilePath });
   }
 
   async run(onProgress?: (message: string) => void): Promise<AgentBacktestResult> {
@@ -413,13 +423,120 @@ export class AgentBacktestEngine {
           required: ["symbol"],
         },
       },
+      {
+        name: "get_regime",
+        description:
+          "Classify current market regime for symbols (bull_trend, bear_trend, high_volatility, low_volatility, mean_reverting, trending)",
+        input_schema: {
+          type: "object",
+          properties: {
+            symbols: { type: "array", items: { type: "string" }, description: "Stock symbols to classify" },
+          },
+          required: ["symbols"],
+        },
+      },
+      {
+        name: "record_enhanced_decision",
+        description:
+          "Record a trading decision with cognitive bias analysis, market conditions, and counterfactual reasoning",
+        input_schema: {
+          type: "object",
+          properties: {
+            symbol: { type: "string", description: "Stock ticker symbol" },
+            action: { type: "string", enum: ["buy", "sell", "hold"], description: "Trading action" },
+            reasoning: { type: "string", description: "Detailed reasoning for the decision" },
+            confidence: { type: "number", description: "Confidence level (0-1)" },
+            priceAtAnalysis: { type: "number", description: "Current price at time of analysis" },
+            biasAvoided: {
+              type: "array",
+              items: { type: "string" },
+              description: "Cognitive biases actively avoided",
+            },
+            biasExplanation: { type: "string", description: "How you identified and avoided these biases" },
+            marketConditions: {
+              type: "object",
+              properties: {
+                regime: { type: "string", description: "Current market regime" },
+                vixLevel: { type: "number", description: "Current VIX level if known" },
+                sectorMomentum: { type: "string", description: "Sector momentum direction" },
+                keyDrivers: { type: "array", items: { type: "string" }, description: "Key market drivers" },
+              },
+              required: ["regime", "keyDrivers"],
+            },
+            counterfactual: { type: "string", description: "What would you do if the opposite happened?" },
+          },
+          required: [
+            "symbol",
+            "action",
+            "reasoning",
+            "confidence",
+            "priceAtAnalysis",
+            "biasAvoided",
+            "biasExplanation",
+            "marketConditions",
+            "counterfactual",
+          ],
+        },
+      },
+      {
+        name: "query_decisions",
+        description: "Search past decisions by symbol, bias type, or outcome status",
+        input_schema: {
+          type: "object",
+          properties: {
+            symbol: { type: "string", description: "Filter by stock symbol" },
+            biasType: { type: "string", description: "Filter by cognitive bias type avoided" },
+            withOutcome: { type: "boolean", description: "Only return decisions with outcome annotations" },
+            limit: { type: "number", description: "Max results (default: 10)" },
+          },
+        },
+      },
+      {
+        name: "generate_bias_report",
+        description:
+          "Generate aggregated bias avoidance report comparing agent performance against human behavioral finance base rates",
+        input_schema: {
+          type: "object",
+          properties: {
+            symbol: { type: "string", description: "Filter by stock symbol (optional)" },
+          },
+        },
+      },
+      {
+        name: "query_decision_patterns",
+        description:
+          "Search for behavioral patterns in past decisions (sold_into_rally, bought_the_dip, high_confidence_correct/wrong, bias_saved_money, held_during_drawdown)",
+        input_schema: {
+          type: "object",
+          properties: {
+            pattern: {
+              type: "string",
+              enum: [
+                "sold_into_rally",
+                "bought_the_dip",
+                "high_confidence_correct",
+                "high_confidence_wrong",
+                "bias_saved_money",
+                "held_during_drawdown",
+              ],
+              description: "Pattern type to search for",
+            },
+            symbol: { type: "string", description: "Filter by stock symbol" },
+            limit: { type: "number", description: "Max results (default: 20)" },
+          },
+          required: ["pattern"],
+        },
+      },
     ];
 
     // Capture for closure
     const historicalData = this.historicalData;
+    const regimeDetector = this.regimeDetector;
+    const journalTools = this.journalTools;
+    const journalFilePath = this.journalFilePath;
 
     // Tool handlers
-    const handleTool = (name: string, input: Record<string, unknown>): unknown => {
+    const handleTool = async (name: string, input: Record<string, unknown>): Promise<unknown> => {
       if (name === "get_risk_status") {
         const snapshot: PortfolioSnapshot = {
           cash: portfolio.getState(currentPrices).cash,
@@ -494,6 +611,34 @@ export class AgentBacktestEngine {
 
         if (trade) {
           cycleTrades.push(trade);
+
+          // Annotate journal decisions when a sell closes with P&L
+          if (side === "sell" && trade.pnl !== undefined) {
+            const entries = readJournal(journalFilePath);
+            const unannotated = entries
+              .filter((e) => e.type === "enhanced_analysis")
+              .map((e) => e.data as EnhancedAnalysisEntry)
+              .filter((d) => d.symbol === symbol && d.outcome === undefined);
+
+            for (const decision of unannotated) {
+              annotateDecisionOutcome(
+                decision.decisionId,
+                {
+                  closedAt: date,
+                  closePrice: price,
+                  pnl: trade.pnl,
+                  pnlPercent:
+                    decision.priceAtAnalysis > 0
+                      ? ((price - decision.priceAtAnalysis) / decision.priceAtAnalysis) * 100
+                      : 0,
+                  holdingPeriodDays: 0,
+                  annotatedAt: new Date().toISOString(),
+                },
+                journalFilePath,
+              );
+            }
+          }
+
           return { success: true, trade };
         }
         return { success: false, error: "Order failed" };
@@ -518,8 +663,60 @@ export class AgentBacktestEngine {
         return { success: true, symbol, date, indicators: summary };
       }
 
+      if (name === "get_regime") {
+        const symbols = input.symbols as string[];
+        const results: Record<string, unknown> = {};
+        for (const sym of symbols) {
+          const allBars = historicalData.get(sym);
+          if (!allBars) continue;
+          const barsToDate = allBars.filter((b) => b.timestamp <= new Date(`${date}T23:59:59Z`).getTime());
+          if (barsToDate.length >= 50) {
+            const snapshot = regimeDetector.classifyRegime(sym, barsToDate);
+            results[sym] = {
+              regime: snapshot.regime,
+              confidence: snapshot.confidence,
+              indicators: snapshot.indicators,
+            };
+          }
+        }
+        return {
+          success: true,
+          regimes: results,
+          context: regimeDetector.buildRegimeContext(symbols),
+        };
+      }
+
+      if (name === "record_enhanced_decision") {
+        return await journalTools.record_enhanced_decision.handler(input as any);
+      }
+
+      if (name === "query_decisions") {
+        return await journalTools.query_decisions.handler(input as any);
+      }
+
+      if (name === "generate_bias_report") {
+        return await journalTools.generate_bias_report.handler(input as any);
+      }
+
+      if (name === "query_decision_patterns") {
+        return await journalTools.query_decision_patterns.handler(input as any);
+      }
+
       return { error: "Unknown tool" };
     };
+
+    // Update regime detector with bars up to current date
+    const currentDateMs = new Date(`${date}T23:59:59Z`).getTime();
+    for (const symbol of this.config.symbols) {
+      const allBars = this.historicalData.get(symbol);
+      if (allBars) {
+        const barsToDate = allBars.filter((b) => b.timestamp <= currentDateMs);
+        if (barsToDate.length >= 50) {
+          this.regimeDetector.update(symbol, barsToDate);
+        }
+      }
+    }
+    const regimeContext = this.regimeDetector.buildRegimeContext(this.config.symbols);
 
     // Build prompts
     const systemPrompt = buildSystemPrompt(this.config.symbols, this.config.allowShorts, this.config.riskLimits);
@@ -544,7 +741,7 @@ export class AgentBacktestEngine {
       peakEquity: portfolioState.peakEquity,
     };
     const riskStatus = riskMonitor.getStatus(snapshot);
-    const cyclePrompt = buildCyclePrompt(portfolioState, riskStatus, allTrades);
+    const cyclePrompt = buildCyclePrompt(portfolioState, riskStatus, allTrades, undefined, regimeContext);
 
     // Run conversation
     const messages: Anthropic.MessageParam[] = [{ role: "user", content: cyclePrompt }];
@@ -554,7 +751,7 @@ export class AgentBacktestEngine {
 
       const response = await this.client.messages.create({
         model: this.config.model,
-        max_tokens: 2048,
+        max_tokens: 16000,
         system: systemPrompt,
         tools,
         messages,
@@ -585,7 +782,7 @@ export class AgentBacktestEngine {
       const toolResults: Array<{ type: "tool_result"; tool_use_id: string; content: string }> = [];
 
       for (const toolUse of toolUses) {
-        const result = handleTool(toolUse.name, toolUse.input);
+        const result = await handleTool(toolUse.name, toolUse.input);
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolUse.id,
@@ -606,7 +803,7 @@ export class AgentBacktestEngine {
       tokens,
       cost,
       trades: cycleTrades,
-      reasoning: reasoning.slice(0, 500),
+      reasoning,
       portfolioValue: portfolio.getEquity(currentPrices),
     };
   }

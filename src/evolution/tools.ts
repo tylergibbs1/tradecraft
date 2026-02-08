@@ -74,7 +74,7 @@ const GetStrategyResultsSchema = z.object({
 const EvolveStrategySchema = z.object({
   strategyId: z.string().describe("Parent strategy ID to evolve from"),
   symbols: z.array(z.string()).min(1).max(20).describe("Symbols to backtest children against"),
-  generations: z.number().int().min(1).max(5).optional().describe("Number of evolution generations (default: 1)"),
+  generations: z.number().int().min(1).max(10).optional().describe("Number of evolution generations (default: 1)"),
 });
 
 const DeployStrategySchema = z.object({

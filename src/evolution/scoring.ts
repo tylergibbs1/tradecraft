@@ -82,6 +82,27 @@ export function summarizeBacktest(result: BacktestResult): StrategyBacktestSumma
 }
 
 /**
+ * Score a backtest result with an optional alpha bonus.
+ * When benchmarkAlpha is provided (annualized excess return vs a benchmark),
+ * it boosts the composite score. Backward compatible: returns base score when
+ * alpha is undefined.
+ */
+export function scoreWithAlpha(result: BacktestResult, benchmarkAlpha?: number): StrategyScore {
+  const base = scoreBacktestResult(result);
+  if (benchmarkAlpha === undefined) return base;
+
+  // Alpha bonus: normalize alpha to 0-1 range (0% = 0, 10%+ = ~1)
+  const alphaNorm = normalize(benchmarkAlpha, 0.05, 15);
+  // Blend: 85% base score + 15% alpha bonus
+  const boosted = base.composite * 0.85 + alphaNorm * 0.15;
+
+  return {
+    ...base,
+    composite: Math.max(0, Math.min(1, boosted)),
+  };
+}
+
+/**
  * Compare two scores (returns positive if a > b)
  */
 export function compareScores(a: StrategyScore, b: StrategyScore): number {

@@ -9,14 +9,24 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const PORTFOLIO_FILE = path.join(DATA_DIR, "portfolio.json");
 const SNAPSHOTS_FILE = path.join(DATA_DIR, "snapshots.json");
 
+export type PositionClosedCallback = (symbol: string, pnl: number, closePrice: number) => void;
+
 export class PortfolioManager {
   private state: PortfolioState;
   private snapshots: DailySnapshot[] = [];
   private commission: number = 0; // Commission per trade
+  private onPositionClosedCallbacks: PositionClosedCallback[] = [];
 
   constructor(initialCapital: number) {
     this.state = this.loadState() ?? this.createInitialState(initialCapital);
     this.snapshots = this.loadSnapshots();
+  }
+
+  /**
+   * Register a callback that fires when a position is fully closed (quantity reaches 0)
+   */
+  onPositionClosed(callback: PositionClosedCallback): void {
+    this.onPositionClosedCallbacks.push(callback);
   }
 
   private ensureDataDir(): void {
@@ -246,9 +256,18 @@ export class PortfolioManager {
     } else {
       // Sell
       if (position) {
+        const pnl = (price - position.averageCost) * quantity;
         position.quantity -= quantity;
         if (position.quantity <= 0) {
           delete this.state.positions[symbol];
+          // Fire position closed callbacks
+          for (const cb of this.onPositionClosedCallbacks) {
+            try {
+              cb(symbol, pnl, price);
+            } catch {
+              // Don't let callback errors break order execution
+            }
+          }
         }
       }
     }

@@ -1,469 +1,207 @@
 # Tradecraft
 
-An AI-native trading system powered by Claude. A swarm of AI agents invents, backtests, and evolves novel trading strategies autonomously, then executes trades within hard risk limits enforced at the infrastructure level.
-
-```
-╔════════════════════════════════════════════════════════════╗
-║                    PORTFOLIO STATUS                        ║
-╚════════════════════════════════════════════════════════════╝
-
-Summary:
-──────────────────────────────────────────────────
-  Cash:        $55,645.36
-  Equity:      $99,987.07
-  Daily P&L:   -$1.14
-
-Positions:
-──────────────────────────────────────────────────
-  Symbol   Qty      Avg Cost    Current     Value        P&L
-  GOOGL      26     $343.92     $343.40   $8,928.40     -$13.52
-  AMZN       37     $242.87     $242.79   $8,983.23      -$2.96
-  AAPL       30     $268.95     $269.29   $8,078.70      $10.20
-  NVDA       53     $186.13     $186.14   $9,865.58       $0.69
-  MSFT       20     $424.60     $424.29   $8,485.80      -$6.20
-```
-
-## Features
-
-- **Autonomous Trading**: Claude analyzes markets and executes trades independently
-- **Strategy Evolution**: AI invents strategies as JSON DSL, backtests them, evolves winners via genetic mutation
-- **Multi-Agent Swarm**: Specialist agents (technical, fundamental, macro, sentiment) collaborate via signal bus with performance-weighted voting
-- **Cross-Cycle Memory**: Persistent memory accumulates market insights across trading cycles
-- **Performance Attribution**: Tracks which agents/signals drive returns and auto-tunes weights
-- **Risk Management**: Hard limits on position size, daily loss, drawdown. Enforced by system, not prompts
-- **Paper Trading**: Safe simulation with real market data from Polygon.io or Yahoo Finance
-- **CLI Interface**: Non-interactive commands for easy automation
-- **Agent Backtesting**: Test the actual Claude agent on historical data
-- **Full Audit Trail**: Every decision logged for review
+AI-native trading system that invents, evolves, and executes trading strategies autonomously. Claude agents trade within hard risk limits enforced at the infrastructure level — not by prompts.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
 bun install
+bun run setup                    # API keys, symbols, risk limits
+bun run cli cycle                # run one trading cycle
+bun run cli status               # portfolio overview
+```
 
-# Configure (set API keys, trading universe, risk limits)
-bun run setup
+## Commands
 
-# Check portfolio
-bun run cli status
+```bash
+# Trading
+bun run cli cycle                # single trading cycle
+bun run cli start                # continuous trading
+bun run cli status               # portfolio + positions
+bun run cli quotes               # live prices
+bun run cli history              # trade log
+bun run cli risk                 # risk limits + circuit breaker
+bun run cli order buy AAPL 10    # manual order
+bun run cli reset                # reset portfolio
 
-# Run a trading cycle
-bun run cli cycle
+# Backtesting
+bun run backtest sma-crossover --start 2024-01-01
+bun run agent-backtest                              # Claude agent on historical data (~$1.50)
+bun run agent-backtest --frequency 1                # daily cycles (~$25/year)
 
-# View trades
-bun run cli history
+# Stress Tests
+bun run scripts/stress-test.ts                                      # March 2020 COVID crash
+bun run scripts/stress-test.ts --start=2022-01-03 --end=2022-06-30  # 2022 bear market
+
+# Research
+bun run scripts/benchmark.ts     # evolution benchmark + fitness curves
+bun run tournament               # multi-model tournament (~$5-20)
+bun run allocation-demo          # capital allocation vs heuristics (~$0.10)
+
+# Dev
+bun test                         # 119 tests, ~50ms
+bun run typecheck
+bun lint
 ```
 
 ## Requirements
 
-- [Bun](https://bun.sh) runtime
-- Anthropic API key
-- Internet connection (for market data)
-- Polygon.io API key (optional, enables real-time quotes, news sentiment, technical indicators, and company data)
+- [Bun](https://bun.sh)
+- `ANTHROPIC_API_KEY`
+- `POLYGON_API_KEY` (optional — enables real-time quotes, news, technicals)
 
-## Installation
+Keys go in `.env` or `~/.config/tradecraft/config.toml`.
 
-```bash
-git clone https://github.com/tylergibbs1/tradecraft.git
-cd tradecraft
-bun install
+## How It Works
+
+The agent gets a portfolio snapshot, market data, and technical indicators each cycle. It decides to buy, sell, or hold. Every order passes through infrastructure-level risk validation before execution:
+
 ```
+Agent: "Buy $50,000 of NVDA"  →  System: REJECTED (exceeds $10k max order)
+Agent: "Buy $9,000 instead"   →  System: EXECUTED
+```
+
+Risk limits (position size, daily loss, drawdown) are enforced by code, not instructions. The circuit breaker halts all trading when triggered.
+
+### Tools
+
+The agent has access to 30+ tools across trading, research, strategy evolution, memory, journaling, regime detection, and capital allocation. Key ones:
+
+| Category | Tools |
+|----------|-------|
+| **Trading** | `place_order`, `get_portfolio`, `get_market_data`, `get_risk_status` |
+| **Research** | `get_technical_indicators`, `get_polygon_news`, `get_financials`, `get_filing` |
+| **Evolution** | `propose_strategy`, `backtest_strategy`, `evolve_strategy`, `deploy_strategy` |
+| **Memory** | `record_insight`, `query_memories`, `get_attribution`, `get_agent_performance` |
+| **Journal** | `record_enhanced_decision`, `generate_bias_report`, `query_decision_patterns` |
+| **Regime** | `get_regime`, `get_adaptation_metrics` |
+| **Allocation** | `evaluate_projects`, `submit_allocation`, `compare_allocation_heuristics` |
+
+### Strategy Evolution
+
+Strategies are expressed as JSON DSL with indicators, entry/exit conditions, and sizing rules. The evolution engine mutates parameters, backtests children against real market data, and selects survivors. After 5 generations:
+
+| Strategy | Return | Sharpe | Win Rate |
+|----------|--------|--------|----------|
+| SMA 10/50 Crossover | +8.05% | 1.64 | 71.4% |
+| RSI Oversold Bounce | +1.62% | 0.89 | 66.7% |
+| EMA 12/26 Momentum (evolved) | **+12.61%** | **1.88** | 83.3% |
+
+### Agent Backtest Results
+
+Historical performance (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/NVDA):
+
+| Period | Return | S&P 500 | Sharpe | Max DD | Cost |
+|--------|--------|---------|--------|--------|------|
+| H1 2024 | +21.93% | ~15% | 8.43 | 3.47% | $2.48 |
+| H2 2024 | +2.19% | ~8% | 1.14 | 9.19% | $2.48 |
+| Full 2024 | +28.26% | ~24% | 4.46 | 9.73% | $4.92 |
+
+### Stress Tests — 7 Market Regimes (2018-2024)
+
+We ran the agent through every kind of market we could find — crashes, bear markets, bull runs, recoveries, and the AI hype rally. 25 weekly trading cycles per test, $100k starting capital, same 5 stocks (SPY, AAPL, MSFT, AMZN, GOOGL). Here's what happened:
+
+| Period | What happened in the market | Agent | SPY | Agent worst dip | SPY worst dip |
+|--------|----------------------------|-------|-----|-----------------|---------------|
+| **2018 Q4** | Fed raised rates, market panicked | -4.2% | ~-14% | -4.2% | ~-20% |
+| **2019 H1** | Steady recovery from 2018 crash | +7.3% | ~+17% | -6.0% | ~-7% |
+| **2020 H1** | COVID crash, then V-shaped recovery | +1.7% | ~-3% | -10.4% | ~-34% |
+| **2021 H1** | Post-vaccine euphoria, everything up | +1.6% | ~+14% | -4.0% | ~-4% |
+| **2022 H1** | Inflation, rate hikes, sustained decline | -6.9% | ~-21% | -11.2% | ~-24% |
+| **2023 H1** | AI hype starts, market rallies | +12.2% | ~+16% | -3.3% | ~-7% |
+| **2024 H1** | AI rally continues, Magnificent 7 | +5.8% | ~+15% | -2.7% | ~-5% |
+
+**In plain English:**
+
+The agent's superpower is not losing money. In all 7 tests, it had smaller dips than just buying and holding SPY. During COVID, while the market dropped 34%, the agent only dropped 10% — it sold early and sat in cash. In the 2022 bear market, it lost 7% while SPY lost 21%.
+
+The tradeoff: it's too cautious in bull markets. When stocks are ripping (2021, 2024), it only captures a fraction of the gains because it waits for multiple confirming signals before buying. It returned +1.6% in a market that went up +14%.
+
+**The scorecard:**
+- Made money in 5 out of 7 periods
+- Beat SPY's return in 2 out of 7 (both were crashes — exactly when you need it)
+- Beat SPY's worst drawdown in 7 out of 7 (100% — never had a bigger dip)
+- Average return: +2.5% per 6-month window
+- Average worst dip: -5.9%
+- Total cost to run all 7 tests: ~$52 in API fees
+
+**Bottom line:** This is a risk manager, not a stock picker. It won't double your money in a bull market, but it also won't let a crash take 30% of your portfolio. Think of it as a seatbelt — you don't notice it until the accident.
+
+### Decision Journal & Bias Tracking
+
+Every decision is recorded with cognitive bias analysis, counterfactual reasoning, and market conditions. The `generate_bias_report` tool compares agent avoidance rates against published human base rates (Kahneman & Tversky 1979, Barber & Odean 2001, etc.).
+
+Pattern queries find specific behavioral patterns: `sold_into_rally`, `bought_the_dip`, `high_confidence_wrong`, `bias_saved_money`.
+
+### Multi-Model Tournament
+
+Runs Opus, Sonnet, and Haiku on identical scenarios. If the cheapest model still beats active managers, the edge is structural (forced discipline, bias awareness) — not raw model capability.
+
+### Capital Allocation
+
+Demonstrates LLM allocation beyond trading. Agent allocates $10M across 12 oversubscribed projects and is scored against four heuristic baselines (equal weight, highest IRR first, lowest risk first, risk parity).
 
 ## Configuration
 
-Run the setup wizard:
-
-```bash
-bun run setup
-```
-
-Or manually edit `~/.config/tradecraft/config.toml`:
-
 ```toml
-dataProvider = "polygon"  # or "yahoo" (free, no key needed)
-dataProviderApiKey = "your-polygon-key"
+# ~/.config/tradecraft/config.toml
+dataProvider = "polygon"       # or "yahoo" (free)
+dataProviderApiKey = "..."
 
 [agentParams]
 model = "claude-sonnet-4-5-20250929"
 maxTurns = 10
-cycleIntervalMs = 60000
 
 [tradingUniverse]
-symbols = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"]
+symbols = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA"]
 allowShorts = false
 
 [riskLimits]
-maxPositionSize = 0.1      # 10% max per position
+maxPositionSize = 0.1         # 10% max per position
 maxPositionCount = 10
-dailyLossLimit = 0.02      # 2% daily stop
-weeklyLossLimit = 0.05     # 5% weekly stop
-maxDrawdown = 0.1          # 10% circuit breaker
-maxOrderValue = 10000      # $10k max order
+dailyLossLimit = 0.02         # 2% daily stop
+weeklyLossLimit = 0.05        # 5% weekly stop
+maxDrawdown = 0.1             # 10% circuit breaker
+maxOrderValue = 10000
 
 [capital]
 initialCapital = 100000
 paperTrading = true
-
-agentMode = "single"  # or "swarm" for multi-agent mode
-
-[swarmParams]
-specialistModel = "claude-sonnet-4-5-20250929"
-parallelSpecialists = true
-minConsensusConfidence = 0.5
 ```
-
-You can also set API keys via environment variables (`ANTHROPIC_API_KEY`, `POLYGON_API_KEY`) or a `.env` file.
-
-## CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `bun run cli status` | Portfolio overview with positions |
-| `bun run cli quotes` | Real-time prices for trading universe |
-| `bun run cli cycle` | Run single trading cycle |
-| `bun run cli start` | Run continuous trading cycles |
-| `bun run cli history` | View trade history |
-| `bun run cli risk` | Check risk limits and circuit breaker |
-| `bun run cli order <side> <symbol> <qty>` | Manual order |
-| `bun run cli reset` | Reset portfolio to initial state |
-
-## How It Works
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                           CLI / TUI                              │
-│                     bun run cli <command>                        │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                    ┌───────────┴───────────┐
-                    ▼                       ▼
-┌───────────────────────────┐ ┌───────────────────────────┐
-│   TradingAgent (single)   │ │  SwarmTradingAgent (swarm) │
-│                           │ │                           │
-│ • Claude analyzes markets │ │ • Specialist agents vote  │
-│ • Calls tools directly    │ │ • Signal bus aggregation  │
-│ • Makes trade decisions   │ │ • Consensus trading       │
-└───────────────────────────┘ └───────────────────────────┘
-                    │                       │
-                    └───────────┬───────────┘
-        ┌───────────┬──────────┼──────────┬───────────┐
-        ▼           ▼          ▼          ▼           ▼
-┌────────────┐┌──────────┐┌────────┐┌──────────┐┌──────────┐
-│ Portfolio  ││   Data   ││  Risk  ││Evolution ││  Memory  │
-│ Manager    ││ Manager  ││Monitor ││ Engine   ││  Store   │
-│            ││          ││        ││          ││          │
-│• Positions ││• Polygon ││• Limits││• DSL     ││• Insights│
-│• Orders    ││• Yahoo   ││• Break ││• Mutate  ││• Query   │
-│• P&L       ││• Cache   ││        ││• Score   ││• Attrib. │
-└────────────┘└──────────┘└────────┘└──────────┘└──────────┘
-```
-
-### Trading Cycle Flow
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  1. START CYCLE                                                  │
-│     CLI calls TradingAgent.runCycle()                           │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  2. BUILD CONTEXT                                                │
-│     • Load portfolio state (cash, positions, P&L)               │
-│     • Check risk status (circuit breaker, limits)               │
-│     • Build system prompt with trading persona                   │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  3. CLAUDE ANALYZES                                              │
-│     Agent receives prompt and calls tools:                       │
-│     ┌─────────────────┐  ┌─────────────────┐                    │
-│     │ get_risk_status │  │ get_market_data │  (parallel)        │
-│     └─────────────────┘  └─────────────────┘                    │
-│     Then analyzes: prices, trends, portfolio weights, risk      │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  4. TRADING DECISION                                             │
-│     Claude decides: BUY, SELL, or HOLD                          │
-│     • Considers position sizing (max 10% per stock)             │
-│     • Checks available cash                                      │
-│     • Evaluates risk/reward                                      │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                    ┌───────────┴───────────┐
-                    ▼                       ▼
-            ┌─────────────┐         ┌─────────────┐
-            │    HOLD     │         │ TRADE       │
-            │  No action  │         │ place_order │
-            └─────────────┘         └─────────────┘
-                                           │
-                                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  5. RISK VALIDATION (Infrastructure-Level)                       │
-│     System checks BEFORE executing:                              │
-│     □ Position size ≤ 10% of portfolio?                         │
-│     □ Order value ≤ $10,000?                                    │
-│     □ Daily loss < 2%?                                          │
-│     □ Circuit breaker closed?                                   │
-│                                                                  │
-│     ✓ PASS → Execute order                                      │
-│     ✗ FAIL → Reject with error message                          │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  6. EXECUTION & LOGGING                                          │
-│     • Update portfolio state                                     │
-│     • Record trade in journal                                    │
-│     • Log for audit trail                                        │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  7. CYCLE COMPLETE                                               │
-│     Report: turns, tokens, cost, orders placed                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Available Tools
-
-| Tool | Purpose |
-|------|---------|
-| `get_risk_status` | Check if trading is allowed, view limits |
-| `get_market_data` | Fetch current prices and optional history |
-| `get_portfolio` | View positions, cash, equity, P&L |
-| `place_order` | Execute a buy/sell order |
-| `cancel_order` | Cancel a pending order |
-| `get_technical_indicators` | SMA, EMA, RSI, MACD (Polygon) |
-| `get_sma` | Simple moving average with configurable window (Polygon) |
-| `get_polygon_news` | News with AI sentiment analysis (Polygon) |
-| `get_company_info` | Company details, market cap, employees (Polygon) |
-| `search_tickers` | Search stocks by name or filter (Polygon) |
-| `get_filing` | SEC EDGAR filings (10-K, 10-Q, etc.) |
-| `get_financials` | Financial statements from SEC filings |
-| `get_news` | General financial news search |
-| `exa_search` / `exa_financial_search` | AI-powered web search (Exa) |
-| `propose_strategy` | Propose a new strategy as JSON DSL |
-| `backtest_strategy` | Backtest a strategy against historical data |
-| `evolve_strategy` | Evolve a strategy through genetic mutation |
-| `deploy_strategy` | Deploy a top-performing strategy |
-| `record_insight` | Save a market insight to cross-cycle memory |
-| `query_memories` | Query accumulated market insights |
-| `get_attribution` | View trade-to-signal P&L attribution |
-| `get_agent_performance` | View per-agent accuracy and weight adjustments |
-
-### Key Design Principle
-
-**Risk limits are enforced at the infrastructure level, not by prompts.**
-
-Even if Claude decides to make a risky trade, the system will reject it:
-
-```
-Claude: "I'll buy $50,000 of NVDA"
-        ↓
-System: ❌ REJECTED - exceeds maxOrderValue ($10,000)
-        ↓
-Claude: "Order rejected. I'll buy $9,000 instead."
-        ↓
-System: ✓ EXECUTED
-```
-
-This separation ensures safety even if the agent makes mistakes or receives adversarial prompts.
-
-## Backtesting
-
-### Rule-Based Strategies
-
-Test predefined algorithmic strategies:
-
-```bash
-# Available: sma-crossover, rsi-mean-reversion, momentum
-bun run backtest sma-crossover --start 2024-01-01
-bun run backtest momentum --symbols AAPL,NVDA,TSLA
-```
-
-### Agent Backtest
-
-Test the actual Claude agent on historical data:
-
-```bash
-# Default: 3 months, weekly cycles (~$1.50)
-bun run agent-backtest
-
-# Custom period
-bun run agent-backtest --start 2024-06-01 --end 2024-12-31
-
-# Daily cycles (more realistic, ~$25-50/year)
-bun run agent-backtest --frequency 1
-
-# Skip confirmation
-bun run agent-backtest -y
-```
-
-**Cost estimates:**
-
-| Period | Frequency | Estimated Cost |
-|--------|-----------|----------------|
-| 1 month | Weekly | ~$0.50 |
-| 3 months | Weekly | ~$1.50 |
-| 1 year | Weekly | ~$5 |
-| 1 year | Daily | ~$25-50 |
-
-### Backtest Results
-
-Agent performance on historical data (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/NVDA):
-
-| Period | Return | S&P 500 | Win Rate | Sharpe | Max Drawdown | API Cost |
-|--------|--------|---------|----------|--------|--------------|----------|
-| H1 2024 | **+21.93%** | ~15% | 73.9% | 8.43 | 3.47% | $2.48 |
-| H2 2024 | **+2.19%** | ~8% | 57.1% | 1.14 | 9.19% | $2.48 |
-| Full 2024 | **+28.26%** | ~24% | 87.8% | 4.46 | 9.73% | $4.92 |
-
-### Strategy Evolution Benchmark
-
-End-to-end benchmark with real Polygon.io data (AAPL/GOOGL/MSFT, Jan–Dec 2024, $100k capital). The evolution engine invents strategies as JSON, backtests against real prices, and evolves winners through genetic mutation.
-
-**Base strategies (Generation 0):**
-
-| Strategy | Return | Sharpe | Win Rate | Max Drawdown | Trades |
-|----------|--------|--------|----------|--------------|--------|
-| SMA 10/50 Crossover | +8.05% | 1.64 | 71.4% | 2.11% | 16 |
-| RSI Oversold Bounce | +1.62% | 0.89 | 66.7% | 1.71% | 6 |
-| EMA 12/26 Momentum | +10.59% | 1.77 | 83.3% | 2.73% | 14 |
-
-**After 2 generations of evolution (5 mutations + 1 crossover per generation):**
-
-| Champion | Return | Sharpe | Win Rate | Max Drawdown | Profit Factor |
-|----------|--------|--------|----------|--------------|---------------|
-| EMA 12/26 Momentum (evolved) | **+12.61%** | **1.88** | 83.3% | 2.41% | 12.35 |
-
-**Performance attribution (real trade P&L):**
-
-| Agent | Trades | Accuracy | Attributed P&L |
-|-------|--------|----------|----------------|
-| ema-momentum | 12 | 83% | $17,573 |
-| sma-crossover | 14 | 71% | $14,326 |
-| rsi-reversal | 6 | 67% | $3,238 |
-
-All numbers are from real backtests against real Polygon.io market data. No synthetic or mocked data.
-
-```bash
-# Run the benchmark yourself
-bun run scripts/benchmark.ts
-```
-
-*Note: Backtests have inherent limitations. Past performance does not guarantee future results.*
 
 ## Project Structure
 
 ```
-tradecraft/
-├── src/
-│   ├── agent/              # Trading agent and tools
-│   │   ├── index.ts        # TradingAgent class
-│   │   ├── mcp-server.ts   # Tool definitions (orders, data, risk, evolution, memory)
-│   │   ├── permissions.ts  # canUseTool risk validation
-│   │   ├── hooks.ts        # Pre/post tool hooks for audit logging
-│   │   ├── prompts.ts      # System and cycle prompts
-│   │   ├── types.ts        # ITradingAgent interface
-│   │   └── swarm-adapter.ts # SwarmTradingAgent adapter for multi-agent mode
-│   ├── agents/             # Multi-agent specialist system
-│   │   ├── specialists/    # Technical, fundamental, macro, sentiment, hypothesis agents
-│   │   ├── portfolio-manager.ts
-│   │   └── signal-bus.ts
-│   ├── attribution/        # Performance attribution engine
-│   │   ├── engine.ts       # P&L distribution, rolling accuracy, weight adjustment
-│   │   ├── tools.ts        # Agent tools: get_attribution, get_agent_performance
-│   │   └── types.ts        # TradeAttribution, AgentPerformance, WeightAdjustment
-│   ├── backtest/           # Backtesting engines
-│   │   ├── engine.ts       # Rule-based backtester
-│   │   ├── agent-engine.ts # Claude agent backtester
-│   │   ├── indicators.ts   # SMA, EMA, RSI, MACD, ATR, Bollinger Bands
-│   │   └── strategies.ts   # SMA crossover, RSI mean reversion, momentum
-│   ├── config/             # TOML config reader/writer + Zod schemas
-│   ├── data/               # Market data layer
-│   │   ├── types.ts        # OHLCV, Quote, TimeFrame, DataProviderInterface
-│   │   ├── cache.ts        # In-memory cache with TTL
-│   │   ├── index.ts        # DataManager (provider routing + caching)
-│   │   └── providers/
-│   │       ├── yahoo.ts    # Yahoo Finance (free, no API key)
-│   │       ├── polygon/    # Polygon.io (quotes, news, indicators, tickers)
-│   │       ├── edgar.ts    # SEC EDGAR filings
-│   │       ├── exa.ts      # Exa AI search
-│   │       └── news.ts     # Financial news
-│   ├── evolution/          # Strategy evolution engine
-│   │   ├── types.ts        # StrategySpec DSL, MutationType, StrategyRecord
-│   │   ├── compiler.ts     # Compile StrategySpec JSON → executable Strategy
-│   │   ├── scoring.ts      # Composite fitness (Sharpe, return, drawdown, win rate)
-│   │   ├── engine.ts       # Mutation + crossover operators
-│   │   ├── store.ts        # Strategy persistence, ranking, pruning
-│   │   └── tools.ts        # Agent tools: propose/backtest/evolve/deploy strategy
-│   ├── memory/             # Cross-cycle memory
-│   │   ├── store.ts        # CRUD, tag-based query, relevance scoring, pruning
-│   │   └── types.ts        # MemoryEntry, MemoryQuery
-│   ├── portfolio/          # Position management + order lifecycle
-│   ├── risk/               # Risk monitor + circuit breaker state machine
-│   ├── journal/            # Trade logging
-│   ├── setup/              # Interactive setup wizard (Ink/React)
-│   ├── ui/                 # TUI app with tabs (Portfolio, Trades, Journal, Agent Log)
-│   ├── main.tsx            # TUI entry point
-│   └── cli.ts              # CLI entry point
-├── scripts/                # Benchmark and test scripts
-│   └── benchmark.ts        # E2E benchmark: evolution + memory + attribution
-├── data/                   # Persisted state (portfolio, strategies, memory, attribution)
-├── logs/                   # Audit logs, agent logs, trade journal
-├── AGENT_GUIDE.md          # Guide for AI agents
-└── README.md
+src/
+  agent/          Trading agent, tools, prompts, permissions
+  allocation/     Capital allocation engine + heuristic baselines
+  attribution/    Trade-to-signal P&L attribution
+  backtest/       Rule-based + agent backtester, benchmarks, indicators
+  config/         TOML config + Zod schemas
+  data/           Market data (Yahoo, Polygon, EDGAR, Exa)
+  evolution/      Strategy DSL, mutation, scoring, persistence
+  journal/        Decision journal, bias reporting, pattern queries
+  memory/         Cross-cycle memory store
+  portfolio/      Position management + order lifecycle
+  regime/         Market regime detection + adaptation tracking
+  risk/           Risk monitor + circuit breaker
+  ui/             Terminal UI (Ink/React)
+scripts/
+  benchmark.ts       Evolution benchmark + fitness curves
+  tournament.ts      Multi-model comparison
+  allocation-demo.ts Capital allocation demo
+  stress-test.ts     Historical stress testing
+tests/               119 tests across 12 files
 ```
 
-## Risk Limits
+## Limitations
 
-| Limit | Default | Description |
-|-------|---------|-------------|
-| Max Position Size | 10% | Maximum % of portfolio in one position |
-| Max Position Count | 10 | Maximum number of positions |
-| Daily Loss Limit | 2% | Stop trading if daily loss exceeds |
-| Weekly Loss Limit | 5% | Stop trading if weekly loss exceeds |
-| Max Drawdown | 10% | Circuit breaker triggers at this drawdown |
-| Max Order Value | $10,000 | Maximum value per order |
-
-When limits are breached, the circuit breaker activates and blocks all trading until reset.
-
-## API Costs
-
-Each trading cycle costs approximately **$0.08-0.15** depending on complexity:
-
-- Simple hold decision: ~$0.08 (8-10k tokens)
-- Multiple trades: ~$0.15-0.20 (15-20k tokens)
-
-For continuous trading at 1-minute intervals, expect ~$100-200/day. Weekly cycles are more economical for testing.
-
-## For AI Agents
-
-See [AGENT_GUIDE.md](./AGENT_GUIDE.md) for a comprehensive guide on operating this system, including:
-- All CLI commands with examples
-- Tool descriptions and usage
-- Troubleshooting common issues
-- Architecture details
-
-## Development
-
-```bash
-# Type checking
-bun run typecheck
-
-# Test API connections
-bun run src/test-api.ts
-
-# Run TUI (requires TTY)
-bun run start
-```
+- **Backtest != live performance.** No order book dynamics, realistic slippage, or market impact modeling.
+- **Narrow universe.** US large-cap equities only. No bonds, commodities, crypto, international.
+- **Anti-churning is prompt-based.** The 5-day hold period and 2-signal requirement are instructions, not hard constraints.
+- **Limited evolution depth.** 5 generations of 8 mutations explores local neighborhoods, not the full parameter space.
+- **Adaptation speed comparisons are approximate.** Published manager data (Busse et al. 2010, Ben-David et al. 2012) are averages across different methodologies.
+- **Capital allocation uses fixed IRR estimates.** Real projects have uncertain, dynamic returns.
 
 ## License
 
@@ -471,4 +209,4 @@ MIT
 
 ## Disclaimer
 
-This is a paper trading system for educational purposes. Do not use for actual trading without understanding the risks. Past performance (including backtests) does not guarantee future results. The authors are not responsible for any financial losses.
+Paper trading system for research purposes. Not financial advice. Past performance does not guarantee future results.

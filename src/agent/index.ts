@@ -3,8 +3,12 @@ import { v4 as uuidv4 } from "uuid";
 import type { Config } from "../config/index.js";
 import type { DataManager } from "../data/index.js";
 import { createEvolutionTools, EvolutionEngine, StrategyStore } from "../evolution/index.js";
+import { annotateDecisionOutcome, readJournal } from "../journal/index.js";
+import { createJournalTools } from "../journal/tools.js";
+import type { EnhancedAnalysisEntry } from "../journal/types.js";
 import { createMemoryTools, MemoryStore } from "../memory/index.js";
 import type { PortfolioManager } from "../portfolio/manager.js";
+import { createRegimeTools, RegimeDetector } from "../regime/index.js";
 import type { PortfolioSnapshot, RiskMonitor } from "../risk/monitor.js";
 import { AgentLogger, createHooks } from "./hooks.js";
 import { createTradingTools, type TradingMCPServerDeps } from "./mcp-server.js";
@@ -148,6 +152,47 @@ export class TradingAgent {
     this.memoryStore = new MemoryStore();
     const memTools = createMemoryTools({ memoryStore: this.memoryStore });
 
+    // Initialize journal tools
+    const journalTools = createJournalTools();
+
+    // Auto-annotate decisions when positions close
+    deps.portfolioManager.onPositionClosed((symbol, pnl, closePrice) => {
+      const entries = readJournal();
+      const unresolved = entries
+        .filter(
+          (e) =>
+            e.type === "enhanced_analysis" &&
+            (e.data as EnhancedAnalysisEntry).symbol === symbol &&
+            !(e.data as EnhancedAnalysisEntry).outcome,
+        )
+        .map((e) => e.data as EnhancedAnalysisEntry);
+
+      for (const decision of unresolved) {
+        const entryDate = new Date(
+          entries.find(
+            (e) =>
+              e.type === "enhanced_analysis" && (e.data as EnhancedAnalysisEntry).decisionId === decision.decisionId,
+          )!.timestamp,
+        );
+        const holdingPeriodDays = Math.round((Date.now() - entryDate.getTime()) / (24 * 60 * 60 * 1000));
+        const pnlPercent =
+          decision.priceAtAnalysis > 0 ? (closePrice - decision.priceAtAnalysis) / decision.priceAtAnalysis : 0;
+
+        annotateDecisionOutcome(decision.decisionId, {
+          closedAt: new Date().toISOString(),
+          closePrice,
+          pnl,
+          pnlPercent,
+          holdingPeriodDays,
+          annotatedAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    // Initialize regime detector
+    const regimeDetector = new RegimeDetector();
+    const regimeToolSet = createRegimeTools({ detector: regimeDetector, dataManager: deps.dataManager });
+
     const toolDeps: TradingMCPServerDeps = {
       portfolioManager: deps.portfolioManager,
       riskMonitor: deps.riskMonitor,
@@ -156,6 +201,8 @@ export class TradingAgent {
       polygonApiKey: deps.config.dataProviderApiKey,
       evolutionTools: evolutionTools as TradingMCPServerDeps["evolutionTools"],
       memoryTools: memTools as TradingMCPServerDeps["memoryTools"],
+      journalTools: journalTools as TradingMCPServerDeps["journalTools"],
+      regimeTools: regimeToolSet as TradingMCPServerDeps["regimeTools"],
     };
 
     this.tools = createTradingTools(toolDeps);

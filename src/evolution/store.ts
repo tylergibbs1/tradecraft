@@ -11,7 +11,7 @@ import type { StrategyRecord } from "./types.js";
 
 const DEFAULT_DATA_DIR = path.join(process.cwd(), "data", "strategies");
 const DEFAULT_INDEX_FILE = path.join(DEFAULT_DATA_DIR, "index.json");
-const MAX_STRATEGIES = 50;
+const MAX_STRATEGIES = 100;
 
 export class StrategyStore {
   private records: StrategyRecord[] = [];
