@@ -1,8 +1,20 @@
 # Tradecraft
 
+[![CI](https://github.com/tylergibbs1/tradecraft/actions/workflows/ci.yml/badge.svg)](https://github.com/tylergibbs1/tradecraft/actions/workflows/ci.yml)
+
 AI-native trading system that invents, evolves, and executes trading strategies autonomously. Claude agents trade within hard risk limits enforced at the infrastructure level — not by prompts.
 
-## Quick Start
+Paper trading only, for research. Not financial advice.
+
+## Quick start
+
+You need:
+
+- [Bun](https://bun.sh)
+- `ANTHROPIC_API_KEY`
+- `POLYGON_API_KEY` (optional — enables real-time quotes, news, technicals)
+
+Keys go in `.env` or `~/.config/tradecraft/config.toml`.
 
 ```bash
 bun install
@@ -11,48 +23,9 @@ bun run cli cycle                # run one trading cycle
 bun run cli status               # portfolio overview
 ```
 
-## Commands
+`bun start` opens the terminal UI.
 
-```bash
-# Trading
-bun run cli cycle                # single trading cycle
-bun run cli start                # continuous trading
-bun run cli status               # portfolio + positions
-bun run cli quotes               # live prices
-bun run cli history              # trade log
-bun run cli risk                 # risk limits + circuit breaker
-bun run cli order buy AAPL 10    # manual order
-bun run cli reset                # reset portfolio
-
-# Backtesting
-bun run backtest sma-crossover --start 2024-01-01
-bun run agent-backtest                              # Claude agent on historical data (~$1.50)
-bun run agent-backtest --frequency 1                # daily cycles (~$25/year)
-
-# Stress Tests
-bun run scripts/stress-test.ts                                      # March 2020 COVID crash
-bun run scripts/stress-test.ts --start=2022-01-03 --end=2022-06-30  # 2022 bear market
-
-# Research
-bun run scripts/benchmark.ts     # evolution benchmark + fitness curves
-bun run tournament               # multi-model tournament (~$5-20)
-bun run allocation-demo          # capital allocation vs heuristics (~$0.10)
-
-# Dev
-bun test                         # 119 tests, ~50ms
-bun run typecheck
-bun lint
-```
-
-## Requirements
-
-- [Bun](https://bun.sh)
-- `ANTHROPIC_API_KEY`
-- `POLYGON_API_KEY` (optional — enables real-time quotes, news, technicals)
-
-Keys go in `.env` or `~/.config/tradecraft/config.toml`.
-
-## How It Works
+## How it works
 
 The agent gets a portfolio snapshot, market data, and technical indicators each cycle. It decides to buy, sell, or hold. Every order passes through infrastructure-level risk validation before execution:
 
@@ -63,7 +36,9 @@ Agent: "Buy $9,000 instead"   →  System: EXECUTED
 
 Risk limits (position size, daily loss, drawdown) are enforced by code, not instructions. The circuit breaker halts all trading when triggered.
 
-### Tools
+## Features
+
+### Agent tools
 
 The agent has access to 30+ tools across trading, research, strategy evolution, memory, journaling, regime detection, and capital allocation. Key ones:
 
@@ -77,7 +52,7 @@ The agent has access to 30+ tools across trading, research, strategy evolution, 
 | **Regime** | `get_regime`, `get_adaptation_metrics` |
 | **Allocation** | `evaluate_projects`, `submit_allocation`, `compare_allocation_heuristics` |
 
-### Strategy Evolution
+### Strategy evolution
 
 Strategies are expressed as JSON DSL with indicators, entry/exit conditions, and sizing rules. The evolution engine mutates parameters, backtests children against real market data, and selects survivors. After 5 generations:
 
@@ -87,7 +62,23 @@ Strategies are expressed as JSON DSL with indicators, entry/exit conditions, and
 | RSI Oversold Bounce | +1.62% | 0.89 | 66.7% |
 | EMA 12/26 Momentum (evolved) | **+12.61%** | **1.88** | 83.3% |
 
-### Agent Backtest Results
+### Decision journal and bias tracking
+
+Every decision is recorded with cognitive bias analysis, counterfactual reasoning, and market conditions. The `generate_bias_report` tool compares agent avoidance rates against published human base rates (Kahneman & Tversky 1979, Barber & Odean 2001, etc.).
+
+Pattern queries find specific behavioral patterns: `sold_into_rally`, `bought_the_dip`, `high_confidence_wrong`, `bias_saved_money`.
+
+### Multi-model tournament
+
+Runs Opus, Sonnet, and Haiku on identical scenarios. If the cheapest model still beats active managers, the edge is structural (forced discipline, bias awareness) — not raw model capability.
+
+### Capital allocation
+
+Demonstrates LLM allocation beyond trading. Agent allocates $10M across 12 oversubscribed projects and is scored against four heuristic baselines (equal weight, highest IRR first, lowest risk first, risk parity).
+
+## Results
+
+### Agent backtest
 
 Historical performance (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/NVDA):
 
@@ -97,7 +88,7 @@ Historical performance (2024, weekly cycles, AAPL/GOOGL/MSFT/AMZN/NVDA):
 | H2 2024 | +2.19% | ~8% | 1.14 | 9.19% | $2.48 |
 | Full 2024 | +28.26% | ~24% | 4.46 | 9.73% | $4.92 |
 
-### Stress Tests — 7 Market Regimes (2018-2024)
+### Stress tests: 7 market regimes (2018-2024)
 
 We ran the agent through every kind of market we could find — crashes, bear markets, bull runs, recoveries, and the AI hype rally. 25 weekly trading cycles per test, $100k starting capital, same 5 stocks (SPY, AAPL, MSFT, AMZN, GOOGL). Here's what happened:
 
@@ -127,19 +118,33 @@ The tradeoff: it's too cautious in bull markets. When stocks are ripping (2021, 
 
 **Bottom line:** This is a risk manager, not a stock picker. It won't double your money in a bull market, but it also won't let a crash take 30% of your portfolio. Think of it as a seatbelt — you don't notice it until the accident.
 
-### Decision Journal & Bias Tracking
+## Commands
 
-Every decision is recorded with cognitive bias analysis, counterfactual reasoning, and market conditions. The `generate_bias_report` tool compares agent avoidance rates against published human base rates (Kahneman & Tversky 1979, Barber & Odean 2001, etc.).
+```bash
+# Trading
+bun run cli cycle                # single trading cycle
+bun run cli start                # continuous trading
+bun run cli status               # portfolio + positions
+bun run cli quotes               # live prices
+bun run cli history              # trade log
+bun run cli risk                 # risk limits + circuit breaker
+bun run cli order buy AAPL 10    # manual order
+bun run cli reset                # reset portfolio
 
-Pattern queries find specific behavioral patterns: `sold_into_rally`, `bought_the_dip`, `high_confidence_wrong`, `bias_saved_money`.
+# Backtesting
+bun run backtest sma-crossover --start 2024-01-01
+bun run agent-backtest                              # Claude agent on historical data (~$1.50)
+bun run agent-backtest --frequency 1                # daily cycles (~$25/year)
 
-### Multi-Model Tournament
+# Stress Tests
+bun run scripts/stress-test.ts                                      # March 2020 COVID crash
+bun run scripts/stress-test.ts --start=2022-01-03 --end=2022-06-30  # 2022 bear market
 
-Runs Opus, Sonnet, and Haiku on identical scenarios. If the cheapest model still beats active managers, the edge is structural (forced discipline, bias awareness) — not raw model capability.
-
-### Capital Allocation
-
-Demonstrates LLM allocation beyond trading. Agent allocates $10M across 12 oversubscribed projects and is scored against four heuristic baselines (equal weight, highest IRR first, lowest risk first, risk parity).
+# Research
+bun run scripts/benchmark.ts     # evolution benchmark + fitness curves
+bun run tournament               # multi-model tournament (~$5-20)
+bun run allocation-demo          # capital allocation vs heuristics (~$0.10)
+```
 
 ## Configuration
 
@@ -169,7 +174,16 @@ initialCapital = 100000
 paperTrading = true
 ```
 
-## Project Structure
+## Development
+
+```bash
+bun test              # 119 tests across 12 files, ~50ms
+bun run typecheck
+bun run lint          # Biome
+bun run ci            # typecheck + lint + tests, as CI runs them
+```
+
+### Project structure
 
 ```
 src/
@@ -203,10 +217,10 @@ tests/               119 tests across 12 files
 - **Adaptation speed comparisons are approximate.** Published manager data (Busse et al. 2010, Ben-David et al. 2012) are averages across different methodologies.
 - **Capital allocation uses fixed IRR estimates.** Real projects have uncertain, dynamic returns.
 
-## License
-
-MIT
-
 ## Disclaimer
 
 Paper trading system for research purposes. Not financial advice. Past performance does not guarantee future results.
+
+## License
+
+[MIT](LICENSE)
